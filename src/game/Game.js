@@ -10,6 +10,7 @@ import { music } from './music.js';
 import { POWERUPS, WEAPONS } from './rules.js';
 import { ReplayWriter } from './replay.js';
 import { Effects } from './effects.js';
+import { createLookFilter } from './lookFilter.js';
 import { DASH_COOLDOWN, DEFAULT_ARENA, EYE_HEIGHT, MAX_HP, Sim, TICK } from './sim.js';
 import { TouchControls } from './touch.js';
 import { Tutorial } from './tutorial.js';
@@ -232,6 +233,7 @@ export class Game {
   }
 
   bindInput() {
+    this.lookFilter = createLookFilter();
     window.addEventListener('keydown', (e) => {
       if (this.state === 'replay' || this.state === 'replay-end') {
         if (e.code === 'Space') {
@@ -256,6 +258,7 @@ export class Game {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     document.addEventListener('mousemove', (e) => {
       if (this.state !== 'playing' || document.pointerLockElement !== this.canvas) return;
+      if (!this.lookFilter.accept(e.movementX, e.movementY, e.timeStamp)) return;
       this.look(e.movementX, e.movementY, MOUSE_LOOK * this.controls.sensitivity);
     });
     document.addEventListener('mousedown', (e) => {
@@ -275,6 +278,7 @@ export class Game {
     document.addEventListener('pointerlockchange', () => {
       if (this.touch) return;
       const locked = document.pointerLockElement === this.canvas;
+      if (locked) this.lookFilter.reset(performance.now());
       if (locked && this.state === 'paused') this.setPaused(false);
       else if (!locked && this.state === 'playing') this.setPaused(true);
     });
@@ -436,9 +440,18 @@ export class Game {
         .catch(() => {});
       return;
     }
+    // Raw input (no OS pointer acceleration) where supported: steadier aim and no scaling glitches.
+    const fail = () => this.state === 'playing' && this.setPaused(true);
     try {
-      const p = this.canvas.requestPointerLock();
-      if (p && p.catch) p.catch(() => this.state === 'playing' && this.setPaused(true));
+      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
+      p?.catch?.((err) => {
+        if (err?.name !== 'NotSupportedError') return fail();
+        try {
+          this.canvas.requestPointerLock()?.catch?.(fail);
+        } catch {
+          fail();
+        }
+      });
     } catch {
       this.setPaused(true);
     }
