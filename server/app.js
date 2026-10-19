@@ -2,14 +2,16 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { createPublicClient, getAddress, http, isAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { generateSiweNonce, parseSiweMessage } from 'viem/siwe';
 import { decodeReplay } from '../src/game/replay.js';
 import { validateRun } from '../src/game/rules.js';
-import { SIM_VERSION } from '../src/game/sim.js';
+import { SIM_VERSION, TICK } from '../src/game/sim.js';
 import { replayRun } from '../src/game/verify.js';
+import { createRateLimiter } from './ratelimit.js';
 import { deploymentFor, resolveChain } from '../src/web3/chains.js';
 
 const NONCE_COOKIE = 'vr_nonce';
@@ -25,6 +27,20 @@ const MAX_REPLAY_BASE64 = 4 * 1024 * 1024; // what we accept over the wire
 const REALTIME_SLACK_SEC = 2;
 const STAT_KEYS = ['score', 'wave', 'kills', 'tokens', 'detonations'];
 
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+// Requests per window. Login is limited per IP (no wallet yet); game endpoints per wallet,
+// plus per IP for the expensive replay verification so one machine can't rotate wallets.
+export const DEFAULT_LIMITS = {
+  nonce: { limit: 20, windowMs: MINUTE },
+  verify: { limit: 10, windowMs: MINUTE },
+  start: { limit: 60, windowMs: HOUR },
+  finish: { limit: 30, windowMs: HOUR },
+  finishIp: { limit: 120, windowMs: HOUR },
+};
+const SMALL_BODY = 32 * 1024;
+const REPLAY_BODY = MAX_REPLAY_BASE64 + 64 * 1024;
+
 export const SCORE_TYPES = {
   Score: [
     { name: 'player', type: 'address' },
@@ -38,10 +54,11 @@ export const SCORE_TYPES = {
 };
 
 /**
- * @param {Record<string, string>} env
- * @param {{ now?: () => number }} [options] `now` is injectable so tests can fast-forward time
+ * @param {Record<string, string>} env  set TRUST_PROXY=1 only behind a proxy that sets X-Forwarded-For
+ * @param {{ now?: () => number, limits?: object | false }} [options]
+ *   `now` is injectable so tests can fast-forward time; `limits: false` disables rate limiting
  */
-export function createApp(env = process.env, { now = Date.now } = {}) {
+export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_LIMITS } = {}) {
   if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) throw new Error('SESSION_SECRET must be at least 32 characters.');
   if (!env.SERVER_SIGNER_KEY) throw new Error('SERVER_SIGNER_KEY is missing.');
 
@@ -88,6 +105,31 @@ export function createApp(env = process.env, { now = Date.now } = {}) {
 
   const readJson = (c) => c.req.json().catch(() => null);
 
+  // ---------- abuse protection ----------
+
+  const limiter = createRateLimiter({ now });
+  // X-Forwarded-For is client-controlled unless a trusted proxy overwrites it.
+  const clientIp = (c) =>
+    (env.TRUST_PROXY === '1' && c.req.header('x-forwarded-for')?.split(',')[0].trim()) ||
+    c.env?.incoming?.socket?.remoteAddress ||
+    'unknown';
+
+  /** Middleware: one request from `name`'s budget, keyed by IP or by the signed-in wallet. */
+  const rateLimit = (name, by) => async (c, next) => {
+    if (limits) {
+      const key = by === 'wallet' ? c.get('session').address : clientIp(c);
+      const res = limiter.take(`${name}:${key}`, limits[name]);
+      if (!res.ok) {
+        c.header('Retry-After', String(res.retryAfter));
+        return c.json({ error: `Terlalu banyak permintaan. Coba lagi dalam ${res.retryAfter} detik.` }, 429);
+      }
+    }
+    await next();
+  };
+
+  const maxBody = (maxSize) =>
+    bodyLimit({ maxSize, onError: (c) => c.json({ error: 'Permintaan terlalu besar.' }, 413) });
+
   const requireSession = async (c, next) => {
     const session = unseal(getCookie(c, SESSION_COOKIE), 'session');
     if (!session) return c.json({ error: 'Belum login ranked.' }, 401);
@@ -103,13 +145,13 @@ export function createApp(env = process.env, { now = Date.now } = {}) {
     c.json({ chainId: chain.id, chainName: chain.name, contract: contractAddress(), signer: signer.address }),
   );
 
-  app.get('/auth/nonce', (c) => {
+  app.get('/auth/nonce', rateLimit('nonce', 'ip'), (c) => {
     const nonce = generateSiweNonce();
     setCookie(c, NONCE_COOKIE, seal({ typ: 'nonce', nonce, exp: now() + NONCE_TTL }), cookieOpts(c, NONCE_TTL));
     return c.json({ nonce });
   });
 
-  app.post('/auth/verify', async (c) => {
+  app.post('/auth/verify', maxBody(SMALL_BODY), rateLimit('verify', 'ip'), async (c) => {
     const body = await readJson(c);
     const { message, signature } = body ?? {};
     if (typeof message !== 'string' || typeof signature !== 'string' || message.length > 2000) {
@@ -152,7 +194,7 @@ export function createApp(env = process.env, { now = Date.now } = {}) {
   });
 
   // The server picks the seed, so a player can't shop for a lucky world.
-  app.post('/game/start', requireSession, (c) => {
+  app.post('/game/start', requireSession, rateLimit('start', 'wallet'), (c) => {
     const { address } = c.get('session');
     const startedAt = now();
     const sessionId = `0x${randomBytes(32).toString('hex')}`;
@@ -161,7 +203,13 @@ export function createApp(env = process.env, { now = Date.now } = {}) {
     return c.json({ ticket, seed, simVersion: SIM_VERSION });
   });
 
-  app.post('/game/finish', requireSession, async (c) => {
+  app.post(
+    '/game/finish',
+    maxBody(REPLAY_BODY),
+    requireSession,
+    rateLimit('finishIp', 'ip'),
+    rateLimit('finish', 'wallet'),
+    async (c) => {
     const { address } = c.get('session');
     const body = await readJson(c);
     const ticket = unseal(body?.ticket, 'ticket');
@@ -182,15 +230,17 @@ export function createApp(env = process.env, { now = Date.now } = {}) {
     } catch {
       return c.json({ error: 'Replay tidak valid.' }, 400);
     }
+    // Cheap check first: a run can't contain more ticks than real time allows, so reject
+    // over-long replays before spending CPU on re-simulating them.
+    const elapsed = (now() - ticket.startedAt) / 1000;
+    if (inputs.length * TICK > elapsed + REALTIME_SLACK_SEC) {
+      return c.json({ error: 'Run berjalan lebih cepat dari waktu nyata.' }, 422);
+    }
     const result = replayRun(ticket.seed, inputs);
     if (!result.ok) return c.json({ error: result.error }, 422);
     const stats = result.stats;
     if (STAT_KEYS.some((k) => body[k] !== stats[k])) {
       return c.json({ error: 'Hasil replay tidak cocok dengan skor yang dikirim.' }, 422);
-    }
-    const elapsed = (now() - ticket.startedAt) / 1000;
-    if (elapsed < result.seconds - REALTIME_SLACK_SEC) {
-      return c.json({ error: 'Run berjalan lebih cepat dari waktu nyata.' }, 422);
     }
     const problem = validateRun(stats, elapsed);
     if (problem) return c.json({ error: problem }, 422);

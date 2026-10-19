@@ -74,7 +74,7 @@ before(async () => {
     SERVER_SIGNER_KEY: signerKey,
     SESSION_SECRET: randomBytes(32).toString('hex'),
     LEADERBOARD_ADDRESS: contract,
-  }, { now: () => clock });
+  }, { now: () => clock, limits: false }); // rate limiting has its own tests
 });
 
 after(() => node?.stop());

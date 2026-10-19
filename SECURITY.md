@@ -41,14 +41,29 @@ Langkah 1–5 diuji otomatis di `tests/security.test.mjs` (*incident drill: leak
 
 - **Bug di logika game atau validator**: jeda `VoxelRaidLeaderboard`, perbaiki, naikkan `SIM_VERSION`, lalu deploy.
   Replay dari versi lama otomatis ditolak.
-- **Server API diserang (CPU/DoS)**: verifikasi replay butuh ~13 ms CPU per menit permainan. Pasang rate limit per
-  wallet dan per IP sebelum production.
+- **Server API diserang (CPU/DoS)**: verifikasi replay butuh ~13 ms CPU per menit permainan. Lapisan yang sudah ada:
+  - Rate limit token bucket (`server/ratelimit.js`, angka di `DEFAULT_LIMITS` pada `server/app.js`):
+
+    | Endpoint | Batas |
+    | --- | --- |
+    | `/auth/nonce` | 20/menit per IP |
+    | `/auth/verify` | 10/menit per IP |
+    | `/game/start` | 60/jam per wallet |
+    | `/game/finish` | 30/jam per wallet + 120/jam per IP |
+
+  - Batas ukuran body: 32 KB untuk endpoint biasa, ~4 MB untuk replay. Zip bomb ditolak saat dekompresi.
+  - Replay yang lebih panjang dari waktu nyata sejak tiket dibuat ditolak **sebelum** simulasi dijalankan.
+
+  Kalau serangan tetap terjadi, turunkan angka di `DEFAULT_LIMITS` lalu deploy ulang server.
 
 ## Sebelum mainnet
 
 - Audit independen untuk ketiga contract dan server verifikasi.
 - Owner dipindah ke Safe multisig, guardian dipasang, dan seluruh runbook dilatih di testnet.
-- Rate limit di API.
+- Rate limiter memakai store bersama (misalnya Redis) kalau server berjalan di lebih dari satu instance. Bawaannya
+  in-memory per proses.
+- Set `TRUST_PROXY=1` **hanya** di belakang proxy yang menimpa `X-Forwarded-For`. Tanpa itu, header tersebut bisa
+  dipalsukan klien untuk menghindari limit per IP.
 - Simpan `SERVER_SIGNER_KEY` di KMS/HSM, bukan di file env.
 
 ## Melaporkan celah
