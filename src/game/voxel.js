@@ -2,6 +2,14 @@ import * as THREE from 'three';
 
 export const unitBox = new THREE.BoxGeometry(1, 1, 1);
 
+// Neon materials are pushed above 1.0 (linear) so only they cross the bloom threshold.
+export const NEON = 2.2;
+export function neon(hex, k = NEON) {
+  const m = new THREE.MeshBasicMaterial({ color: hex });
+  m.color.multiplyScalar(k);
+  return m;
+}
+
 // Deterministic RNG so textures look identical on every load.
 function rng(seed) {
   return () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;

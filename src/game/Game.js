@@ -9,10 +9,12 @@ import { sfx } from './audio.js';
 import { music } from './music.js';
 import { POWERUPS, WEAPONS } from './rules.js';
 import { ReplayWriter } from './replay.js';
-import { ARENA, ARENAS, DASH_COOLDOWN, DEFAULT_ARENA, EYE_HEIGHT, LOW_COVER, MAX_HP, Sim, TICK } from './sim.js';
+import { Effects } from './effects.js';
+import { DASH_COOLDOWN, DEFAULT_ARENA, EYE_HEIGHT, MAX_HP, Sim, TICK } from './sim.js';
 import { TouchControls } from './touch.js';
 import { Tutorial } from './tutorial.js';
-import { blockTexture, buildEnemyModel, buildGun, buildPickup, DEFAULT_SKIN, floorTexture, starField, unitBox } from './voxel.js';
+import { buildEnemyModel, buildGun, buildPickup, DEFAULT_SKIN, neon, unitBox } from './voxel.js';
+import { World } from './world.js';
 
 const MAX_PROJECTILES = 256;
 // Render at a fraction of the screen resolution and upscale for the pixel look.
@@ -23,25 +25,8 @@ const QUALITY = {
 const SLOW_FRAME = 1 / 42; // auto quality drops when frames average slower than this
 const MAX_STEPS_PER_FRAME = 5;
 const REPLAY_SPEEDS = [1, 2, 4];
-const MAX_DMG_NUMBERS = 32;
 const BASE_FOV = 75;
-const DUST_COUNT = 260;
-// Neon materials are pushed above 1.0 (linear) so only they cross the bloom threshold.
-const NEON = 2.2;
 const BLOOM_STRENGTH = 0.45;
-
-const neon = (hex, k = NEON) => {
-  const m = new THREE.MeshBasicMaterial({ color: hex });
-  m.color.multiplyScalar(k);
-  return m;
-};
-const ringGeometry = new THREE.RingGeometry(0.7, 1, 24);
-
-// Per-arena look: neon colours, wall tint range ([r, g, b] min and max) and sky/fog colour.
-const ARENA_THEMES = {
-  citadel: { primary: 0xff3fa4, secondary: 0x3ff2ff, tintMin: [0.82, 0.82, 0.82], tintMax: [1, 1, 1], sky: 0x120a24 },
-  foundry: { primary: 0xff7b29, secondary: 0x3fe0c5, tintMin: [0.95, 0.62, 0.5], tintMax: [1, 0.78, 0.62], sky: 0x1a0d12 },
-};
 
 const WHITE = new THREE.Color(0xffffff);
 const ENRAGED = new THREE.Color(0xff2040);
@@ -105,29 +90,13 @@ export class Game {
     this.enemyViews = new Map();
 
     this.pickupViews = new Map();
-    this.particles = [];
-    this.fx = []; // tracers, explosion flashes and spawn rings
-    this.debris = []; // voxel chunks of destroyed enemies
-    this.dyingMaterials = [];
-    this.particleColors = new Map();
     this.dummy = new THREE.Object3D();
-    // Particles and enemy shots are instanced: one draw call each, however many are alive.
-    this.particleMesh = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial(), QUALITY.high.particles);
-    this.particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.particleMesh.setColorAt(0, new THREE.Color());
-    this.particleMesh.frustumCulled = false;
-    this.particleMesh.count = 0;
-    this.scene.add(this.particleMesh);
+    // Enemy shots are instanced: one draw call however many are alive.
     this.projMesh = new THREE.InstancedMesh(unitBox, neon(0xff3fa4), MAX_PROJECTILES);
     this.projMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.projMesh.frustumCulled = false;
     this.projMesh.count = 0;
     this.scene.add(this.projMesh);
-    this.tracerMat = neon(DEFAULT_SKIN.tracer);
-    this.blastMat = new THREE.MeshBasicMaterial({ color: 0xff7b29, transparent: true, opacity: 0.6, depthWrite: false });
-    this.blastMat.color.multiplyScalar(2);
-    this.ringMat = new THREE.MeshBasicMaterial({ color: 0x3ff2ff, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-    this.ringMat.color.multiplyScalar(NEON);
     this.lastAim = { yaw: 0, pitch: 0 };
     this.sway = { x: 0, y: 0 };
     this.flashOverlay = 0;
@@ -166,7 +135,12 @@ export class Game {
       flash: q('#screen-flash'),
     };
     this.hudCache = new Map();
-    this.dmgNumbers = [];
+    this.world = new World(this.scene);
+    this.effects = new Effects(this.scene, {
+      camera: this.camera,
+      numberLayer: this.hud.dmgLayer,
+      capacity: QUALITY.high.particles,
+    });
 
     if (touch) {
       container.classList.add('touch');
@@ -180,7 +154,6 @@ export class Game {
       });
     }
 
-    this.buildWorld();
     this.buildWeapons();
     this.bindInput();
     this.hud.replayPause.addEventListener('click', () => this.toggleReplayPause());
@@ -192,138 +165,6 @@ export class Game {
   }
 
   // ---------- setup ----------
-
-  /** Everything that is the same in every arena: lights, ground, skyline, stars, dust. */
-  buildWorld() {
-    const s = this.scene;
-    s.add(new THREE.HemisphereLight(0xb79bff, 0x1a0f2e, 1.5));
-    const sun = new THREE.DirectionalLight(0xffd9f0, 2.0);
-    sun.position.set(10, 20, 6);
-    s.add(sun);
-
-    const ftex = floorTexture();
-    ftex.repeat.set(ARENA, ARENA);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), new THREE.MeshLambertMaterial({ map: ftex }));
-    floor.rotation.x = -Math.PI / 2;
-    s.add(floor);
-
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({ color: 0x0d0819 }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.02;
-    s.add(ground);
-
-    this.blockTexture = blockTexture();
-    this.arenaGroup = new THREE.Group();
-    s.add(this.arenaGroup);
-    const towerMat = new THREE.MeshLambertMaterial({ color: 0x1c1233 });
-    const capMats = [neon(0xff3fa4, 2), neon(0x3ff2ff, 2)];
-    for (let i = 0; i < 48; i++) {
-      const a = (i / 48) * Math.PI * 2 + Math.random() * 0.1;
-      const dist = 45 + Math.random() * 25;
-      const w = 3 + Math.random() * 5;
-      const h = 6 + Math.random() * 22;
-      const tower = new THREE.Mesh(unitBox, towerMat);
-      tower.scale.set(w, h, w);
-      tower.position.set(Math.cos(a) * dist, h / 2, Math.sin(a) * dist);
-      s.add(tower);
-      const cap = new THREE.Mesh(unitBox, capMats[i % 2]);
-      cap.scale.set(w * 0.5, 0.4, w * 0.5);
-      cap.position.set(tower.position.x, h + 0.2, tower.position.z);
-      s.add(cap);
-    }
-    s.add(starField(700, 110));
-
-    // Slow-drifting dust motes give the arena some depth.
-    const dust = new Float32Array(DUST_COUNT * 3);
-    for (let i = 0; i < DUST_COUNT; i++) {
-      dust.set([(Math.random() * 2 - 1) * ARENA, Math.random() * 8, (Math.random() * 2 - 1) * ARENA], i * 3);
-    }
-    const dustGeo = new THREE.BufferGeometry();
-    dustGeo.setAttribute('position', new THREE.BufferAttribute(dust, 3));
-    this.dust = new THREE.Points(
-      dustGeo,
-      new THREE.PointsMaterial({ color: 0xb79bff, size: 1, sizeAttenuation: false, transparent: true, opacity: 0.55 }),
-    );
-    s.add(this.dust);
-  }
-
-  /** Walls, cover, lights and colours for one arena; rebuilt only when the arena changes. */
-  buildArena(id) {
-    if (this.arenaId === id) return;
-    this.arenaId = id;
-    const theme = ARENA_THEMES[id];
-    const group = this.arenaGroup;
-    group.traverse((o) => {
-      if (o.isMesh) o.material.dispose(); // the block texture is shared and survives
-      if (o.isInstancedMesh) o.dispose();
-    });
-    group.clear();
-
-    this.scene.background.setHex(theme.sky);
-    this.scene.fog.color.setHex(theme.sky);
-    const a = new THREE.PointLight(theme.primary, 10, 30, 1);
-    a.position.set(-12, 5, -12);
-    const b = new THREE.PointLight(theme.secondary, 10, 30, 1);
-    b.position.set(12, 5, 12);
-    group.add(a, b);
-
-    // Perimeter wall and cover blocks as one instanced mesh of unit voxels.
-    const cells = [];
-    for (let y = 0; y < 3; y++) {
-      for (let i = -ARENA; i < ARENA; i++) {
-        const c = i + 0.5;
-        cells.push([c, y + 0.5, -ARENA + 0.5], [c, y + 0.5, ARENA - 0.5]);
-        if (i > -ARENA && i < ARENA - 1) cells.push([-ARENA + 0.5, y + 0.5, c], [ARENA - 0.5, y + 0.5, c]);
-      }
-    }
-    const glowMat = neon(theme.secondary);
-    const ledgeMat = neon(theme.primary, 1.4);
-    this.pillarGlow = { mat: glowMat, base: glowMat.color.clone() };
-    for (const [x, z, w, d, h] of ARENAS[id].blocks) {
-      for (let y = 0; y < Math.ceil(h); y++) {
-        for (let ix = 0; ix < w; ix++) {
-          for (let iz = 0; iz < d; iz++) cells.push([x - w / 2 + ix + 0.5, y + 0.5, z - d / 2 + iz + 0.5]);
-        }
-      }
-      if (h > LOW_COVER) {
-        const glow = new THREE.Mesh(unitBox, glowMat);
-        glow.scale.setScalar(0.5);
-        glow.position.set(x, h + 0.25, z);
-        group.add(glow);
-      } else {
-        // A neon ledge marks waist-high cover you can shoot over.
-        const ledge = new THREE.Mesh(unitBox, ledgeMat);
-        ledge.scale.set(w + 0.02, 0.08, d + 0.02);
-        ledge.position.set(x, h + 0.04, z);
-        group.add(ledge);
-      }
-    }
-    const blocks = new THREE.InstancedMesh(unitBox, new THREE.MeshLambertMaterial({ map: this.blockTexture }), cells.length);
-    const m = new THREE.Matrix4();
-    const col = new THREE.Color();
-    cells.forEach(([x, y, z], i) => {
-      blocks.setMatrixAt(i, m.makeTranslation(x, y, z));
-      const k = Math.random();
-      const [r0, g0, b0] = theme.tintMin;
-      const [r1, g1, b1] = theme.tintMax;
-      blocks.setColorAt(i, col.setRGB(r0 + (r1 - r0) * k, g0 + (g1 - g0) * k, b0 + (b1 - b0) * k));
-    });
-    group.add(blocks);
-
-    const trimMat = neon(theme.primary, 1.1);
-    this.trim = { mat: trimMat, base: trimMat.color.clone() };
-    for (const [sx, sz, x, z] of [
-      [ARENA * 2, 1.02, 0, -ARENA + 0.5],
-      [ARENA * 2, 1.02, 0, ARENA - 0.5],
-      [1.02, ARENA * 2, -ARENA + 0.5, 0],
-      [1.02, ARENA * 2, ARENA - 0.5, 0],
-    ]) {
-      const trim = new THREE.Mesh(unitBox, trimMat);
-      trim.scale.set(sx, 0.1, sz);
-      trim.position.set(x, 3.05, z);
-      group.add(trim);
-    }
-  }
 
   buildWeapons() {
     this.guns = WEAPONS.map((w) => {
@@ -353,7 +194,7 @@ export class Game {
       m.accent.color.setHex(s.accent);
       m.accent.emissive.setHex(s.accent);
     }
-    this.tracerMat.color.setHex(s.tracer).multiplyScalar(NEON);
+    this.effects.setTracerColor(s.tracer);
   }
 
   /** 'auto' starts high (low on touch devices) and steps down if frames get slow. */
@@ -365,8 +206,9 @@ export class Game {
 
   applyQuality(q) {
     this.quality = q;
-    if (this.dust) this.dust.visible = q.dust;
-    if (this.particles.length > q.particles) this.particles.length = q.particles;
+    this.world.dustVisible = q.dust;
+    this.effects.maxParticles = q.particles;
+    if (this.effects.particles.length > q.particles) this.effects.particles.length = q.particles;
     this.resize();
   }
 
@@ -526,7 +368,7 @@ export class Game {
     sfx.unlock();
     this.resize();
     this.clearViews();
-    this.buildArena(arena);
+    this.world.setArena(arena);
     this.sim = new Sim(seed, { arena });
     this.aim = { yaw: 0, pitch: 0 };
     this.pending = { dash: false, reload: false, weapon: -1 };
@@ -602,19 +444,10 @@ export class Game {
   clearViews() {
     for (const v of this.enemyViews.values()) this.removeEnemyView(v);
     for (const v of this.pickupViews.values()) this.removePickupView(v);
-    for (const f of this.fx) this.scene.remove(f.mesh);
-    for (const d of this.dmgNumbers) d.el.remove();
-    for (const d of this.debris) this.scene.remove(d.mesh);
-    for (const d of this.dyingMaterials) d.materials.forEach((m) => m.dispose());
-    this.debris = [];
-    this.dyingMaterials = [];
+    this.effects.clear();
     this.enemyViews.clear();
     this.pickupViews.clear();
-    this.particles = [];
-    this.particleMesh.count = 0;
     this.projMesh.count = 0;
-    this.fx = [];
-    this.dmgNumbers = [];
   }
 
   gameOver() {
@@ -726,9 +559,9 @@ export class Game {
           if (v) {
             v.flash = 0.07;
             v.squash = 1;
-            this.burst(this.tmp.set(ev.x, ev.y, ev.z), v.model.colors, ev.crit ? 6 : 3, 4, 0.1);
+            this.effects.burst(this.tmp.set(ev.x, ev.y, ev.z), v.model.colors, ev.crit ? 6 : 3, 4, 0.1);
           }
-          this.addDmgNumber(String(ev.dmg), ev.x, ev.y, ev.z, ev.crit ? 'crit' : '');
+          this.effects.number(String(ev.dmg), ev.x, ev.y, ev.z, ev.crit ? 'crit' : '');
           if (ev.crit) {
             this.critT = 0.15;
             sfx.crit();
@@ -742,11 +575,11 @@ export class Game {
           const v = this.enemyViews.get(ev.id);
           const boss = ev.type === 'boss';
           if (v) {
-            this.burst(this.tmp.set(ev.x, ev.y, ev.z), v.model.colors, boss ? 40 : 10, boss ? 10 : 7, boss ? 0.35 : 0.2);
-            this.shatter(v, boss ? 9 : 6);
+            this.effects.burst(this.tmp.set(ev.x, ev.y, ev.z), v.model.colors, boss ? 40 : 10, boss ? 10 : 7, boss ? 0.35 : 0.2);
+            this.effects.shatter(v.model, boss ? 9 : 6);
             this.enemyViews.delete(ev.id);
           }
-          this.addDmgNumber(`+${Math.round(ev.score)}`, ev.x, ev.y + 0.6, ev.z, 'score');
+          this.effects.number(`+${Math.round(ev.score)}`, ev.x, ev.y + 0.6, ev.z, 'score');
           sfx.at(this.spot(ev.x, ev.z), 'kill');
           if (boss) {
             this.hud.bossBar.hidden = true;
@@ -759,17 +592,14 @@ export class Game {
         case 'detonate': {
           const v = this.enemyViews.get(ev.id);
           if (v) {
-            this.shatter(v, 8);
+            this.effects.shatter(v.model, 8);
             this.enemyViews.delete(ev.id);
           }
           break;
         }
         case 'explode': {
-          this.burst(this.tmp.set(ev.x, ev.y, ev.z), [0xff7b29, 0xffd23f, 0x2a1a2e], 36, 9, 0.25);
-          const blast = new THREE.Mesh(unitBox, this.blastMat.clone());
-          blast.position.set(ev.x, ev.y, ev.z);
-          this.scene.add(blast);
-          this.fx.push({ mesh: blast, life: 0.3, maxLife: 0.3, grow: ev.r * 2 });
+          this.effects.burst(this.tmp.set(ev.x, ev.y, ev.z), [0xff7b29, 0xffd23f, 0x2a1a2e], 36, 9, 0.25);
+          this.effects.blast(ev.x, ev.y, ev.z, ev.r);
           const dist = Math.hypot(ev.x - sim.player.x, ev.z - sim.player.z);
           if (dist < 12) {
             this.shake = Math.min(1, this.shake + 0.5);
@@ -787,14 +617,14 @@ export class Game {
           this.onShot(ev);
           break;
         case 'blocked':
-          this.burst(this.tmp.set(ev.x, ev.y, ev.z), [0x3fa9ff, 0xffffff], 5, 4, 0.08);
+          this.effects.burst(this.tmp.set(ev.x, ev.y, ev.z), [0x3fa9ff, 0xffffff], 5, 4, 0.08);
           sfx.at(this.spot(ev.x, ev.z), 'shieldHit');
           break;
         case 'impact':
-          this.burst(this.tmp.set(ev.x, ev.y, ev.z), [0x8b7bd8, 0x5b4a92], 4, 3, 0.08);
+          this.effects.burst(this.tmp.set(ev.x, ev.y, ev.z), [0x8b7bd8, 0x5b4a92], 4, 3, 0.08);
           break;
         case 'projHit':
-          this.burst(this.tmp.set(ev.x, ev.y, ev.z), [0xff3fa4], 4, 3, 0.08);
+          this.effects.burst(this.tmp.set(ev.x, ev.y, ev.z), [0xff3fa4], 4, 3, 0.08);
           break;
         case 'enemyShot':
           sfx.at(this.spot(ev.x, ev.z), 'enemyShoot');
@@ -871,7 +701,7 @@ export class Game {
     this.flashT = ev.weapon === 2 ? 0.08 : 0.05;
     this.camera.updateMatrixWorld(true);
     this.guns[ev.weapon].muzzle.getWorldPosition(this.tmp);
-    for (const end of ev.ends) this.spawnTracer(this.tmp, end, style);
+    for (const end of ev.ends) this.effects.tracer(this.tmp, end, style);
     if (ev.weapon === 2) this.shake = Math.min(1, this.shake + 0.25);
     sfx[WEAPON_SFX[ev.weapon]]();
   }
@@ -892,77 +722,14 @@ export class Game {
     // Eyes, visors and fuses glow through the bloom pass.
     for (const m of model.materials) if (m.userData.baseEmissive.getHex() !== 0) m.emissiveIntensity = 2;
     this.enemyViews.set(e.id, { model, flash: 0, flashing: false, fuseMat, squash: 0 });
-    this.burst(this.tmp.set(e.x, 0.3, e.z), [0x9b5de5, 0x3ff2ff], e.type === 'boss' ? 30 : 10, 5);
-    const ring = new THREE.Mesh(ringGeometry, this.ringMat.clone());
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(e.x, 0.05, e.z);
-    this.scene.add(ring);
-    this.fx.push({ mesh: ring, life: 0.7, maxLife: 0.7, ring: e.radius * 2.2 + 0.5 });
+    this.effects.burst(this.tmp.set(e.x, 0.3, e.z), [0x9b5de5, 0x3ff2ff], e.type === 'boss' ? 30 : 10, 5);
+    this.effects.ring(e.x, e.z, e.radius * 2.2 + 0.5);
     if (e.type === 'boss') this.hud.bossBar.hidden = false;
   }
 
   removeEnemyView(v) {
     this.scene.remove(v.model.group);
     v.model.materials.forEach((m) => m.dispose());
-  }
-
-  /** Breaks an enemy model into its voxels, which fly apart and fade. */
-  shatter(v, power) {
-    const g = v.model.group;
-    g.updateMatrixWorld(true);
-    const parts = [];
-    g.traverse((o) => o.isMesh && parts.push(o));
-    let longest = 0;
-    for (const m of parts) {
-      this.scene.attach(m); // keeps the world transform
-      const dir = m.position.clone().sub(g.position);
-      dir.y = Math.max(0.3, dir.y);
-      dir.normalize().multiplyScalar(power * (0.5 + Math.random() * 0.8));
-      dir.y += power * 0.5;
-      const life = 0.9 + Math.random() * 0.6;
-      longest = Math.max(longest, life);
-      this.debris.push({
-        mesh: m,
-        vel: dir,
-        spin: new THREE.Vector3(Math.random() * 12 - 6, Math.random() * 12 - 6, Math.random() * 12 - 6),
-        life,
-        maxLife: life,
-        base: m.scale.clone(),
-      });
-    }
-    this.scene.remove(g);
-    this.dyingMaterials.push({ materials: v.model.materials, life: longest + 0.05 });
-  }
-
-  updateDebris(dt) {
-    for (const d of this.debris) {
-      d.life -= dt;
-      if (d.life <= 0) {
-        this.scene.remove(d.mesh);
-        continue;
-      }
-      const m = d.mesh;
-      d.vel.y -= 22 * dt;
-      m.position.addScaledVector(d.vel, dt);
-      if (m.position.y < 0.05) {
-        m.position.y = 0.05;
-        d.vel.y *= -0.3;
-        d.vel.x *= 0.6;
-        d.vel.z *= 0.6;
-        d.spin.multiplyScalar(0.6);
-      }
-      m.rotation.x += d.spin.x * dt;
-      m.rotation.y += d.spin.y * dt;
-      m.rotation.z += d.spin.z * dt;
-      const k = Math.min(1, (d.life / d.maxLife) * 3);
-      m.scale.copy(d.base).multiplyScalar(k);
-    }
-    this.debris = this.debris.filter((d) => d.life > 0);
-    for (const d of this.dyingMaterials) {
-      d.life -= dt;
-      if (d.life <= 0) d.materials.forEach((m) => m.dispose());
-    }
-    this.dyingMaterials = this.dyingMaterials.filter((d) => d.life > 0);
   }
 
   addPickupView(pk) {
@@ -1061,10 +828,7 @@ export class Game {
       this.updateHud(dt);
       if (this.state === 'playing') this.tutorial?.update(this.sim, dt);
     }
-    this.updateParticles(dt);
-    this.updateDebris(dt);
-    this.updateFx(dt);
-    this.updateDmgNumbers(dt);
+    this.effects.update(dt);
     this.updateAmbience(dt);
   }
 
@@ -1073,18 +837,8 @@ export class Game {
     if (this.state === 'playing' || this.state === 'replay') music.setIntensity(sim.boss ? 2 : sim.intermission > 0 ? 0 : 1);
 
     const beat = music.pulse();
-    this.trim.mat.color.copy(this.trim.base).multiplyScalar(1 + beat * 0.7);
-    this.pillarGlow.mat.color.copy(this.pillarGlow.base).multiplyScalar(0.85 + beat * 0.4);
+    this.world.animate(dt, sim.time, beat);
     this.bloom.strength = BLOOM_STRENGTH + beat * 0.12;
-
-    const pos = this.dust.geometry.attributes.position;
-    for (let i = 0; i < DUST_COUNT; i++) {
-      let y = pos.getY(i) + dt * (0.15 + (i % 7) * 0.03);
-      if (y > 8) y = 0;
-      pos.setY(i, y);
-      pos.setX(i, pos.getX(i) + Math.sin(sim.time * 0.3 + i) * dt * 0.1);
-    }
-    pos.needsUpdate = true;
 
     this.flashOverlay = Math.max(0, this.flashOverlay - dt * 3);
     this.hud.flash.style.opacity = String(this.flashOverlay);
@@ -1153,121 +907,6 @@ export class Game {
     gun.flash.visible = this.flashT > 0;
     gun.flash.rotation.z = Math.random() * Math.PI;
     this.muzzleLight.intensity = this.flashT > 0 ? 6 : 0;
-  }
-
-  spawnTracer(from, to, style) {
-    const b = this.tmp.clone().set(to.x, to.y, to.z);
-    const mesh = new THREE.Mesh(unitBox, this.tracerMat);
-    mesh.position.copy(from).lerp(b, 0.5);
-    mesh.lookAt(b);
-    mesh.scale.set(style.width, style.width, from.distanceTo(b));
-    this.scene.add(mesh);
-    this.fx.push({ mesh, life: style.life, maxLife: style.life, width: style.width });
-  }
-
-  updateFx(dt) {
-    for (const f of this.fx) {
-      f.life -= dt;
-      if (f.life <= 0) {
-        this.scene.remove(f.mesh);
-        if (f.grow || f.ring) f.mesh.material.dispose();
-        continue;
-      }
-      const k = f.life / f.maxLife;
-      if (f.ring) {
-        f.mesh.scale.setScalar(f.ring * (1 - k) + 0.3);
-        f.mesh.material.opacity = k;
-      } else if (f.grow) {
-        f.mesh.scale.setScalar(f.grow * (1 - k * k) + 0.2);
-        f.mesh.material.opacity = 0.6 * k;
-      } else if (f.width) {
-        f.mesh.scale.x = f.mesh.scale.y = f.width * k;
-      }
-    }
-    this.fx = this.fx.filter((f) => f.life > 0);
-  }
-
-  // ---------- particles ----------
-
-  burst(pos, colors, count, speed, size = 0.15) {
-    for (let i = 0; i < count; i++) {
-      if (this.particles.length >= this.quality.particles) break;
-      const hex = colors[i % colors.length];
-      let color = this.particleColors.get(hex);
-      if (!color) {
-        color = new THREE.Color(hex);
-        this.particleColors.set(hex, color);
-      }
-      const v = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 1.2 + 0.2, Math.random() * 2 - 1)
-        .normalize()
-        .multiplyScalar(speed * (0.4 + Math.random()));
-      const life = 0.5 + Math.random() * 0.6;
-      this.particles.push({
-        pos: pos.clone(),
-        vel: v,
-        rot: 0,
-        life,
-        maxLife: life,
-        size: size * (0.6 + Math.random() * 0.8),
-        spin: Math.random() * 10,
-        color,
-      });
-    }
-  }
-
-  updateParticles(dt) {
-    this.particles = this.particles.filter((pt) => (pt.life -= dt) > 0);
-    const mesh = this.particleMesh;
-    const d = this.dummy;
-    this.particles.forEach((pt, i) => {
-      pt.vel.y -= 20 * dt;
-      pt.pos.addScaledVector(pt.vel, dt);
-      if (pt.pos.y < pt.size * 0.5) {
-        pt.pos.y = pt.size * 0.5;
-        pt.vel.y *= -0.35;
-        pt.vel.x *= 0.6;
-        pt.vel.z *= 0.6;
-      }
-      pt.rot += pt.spin * dt;
-      d.position.copy(pt.pos);
-      d.rotation.set(pt.rot, pt.rot, 0);
-      d.scale.setScalar(pt.size * Math.min(1, (pt.life / pt.maxLife) * 2));
-      d.updateMatrix();
-      mesh.setMatrixAt(i, d.matrix);
-      mesh.setColorAt(i, pt.color);
-    });
-    mesh.count = this.particles.length;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }
-
-  // ---------- floating numbers ----------
-
-  addDmgNumber(text, x, y, z, kind) {
-    if (this.dmgNumbers.length >= MAX_DMG_NUMBERS) this.dmgNumbers.shift().el.remove();
-    const el = document.createElement('span');
-    el.className = `dmg ${kind}`;
-    el.textContent = text;
-    this.hud.dmgLayer.append(el);
-    this.dmgNumbers.push({ el, x: x + (Math.random() - 0.5) * 0.4, y, z, life: 0.8 });
-  }
-
-  updateDmgNumbers(dt) {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    for (const d of this.dmgNumbers) {
-      d.life -= dt;
-      d.y += dt * 1.2;
-      const v = this.tmp.set(d.x, d.y, d.z).project(this.camera);
-      if (d.life <= 0 || v.z > 1) {
-        d.el.style.opacity = '0';
-      } else {
-        d.el.style.opacity = String(Math.min(1, d.life * 3));
-        d.el.style.transform = `translate(${(v.x * 0.5 + 0.5) * w}px, ${(-v.y * 0.5 + 0.5) * h}px) translate(-50%, -50%)`;
-      }
-    }
-    for (const d of this.dmgNumbers) if (d.life <= 0) d.el.remove();
-    this.dmgNumbers = this.dmgNumbers.filter((d) => d.life > 0);
   }
 
   // ---------- HUD ----------
