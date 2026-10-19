@@ -6,6 +6,8 @@ import { loadScores, playerSummary, saveScore } from './scores.js';
 import { loadReplay } from './replays.js';
 import { equippedSkin, initArsenalUI, refresh as refreshArsenal } from './ui/arsenalUI.js';
 import { currentDaily, initDailyUI, loadDaily, render as renderDaily } from './ui/dailyUI.js';
+import { initRewardUI, refreshReward } from './ui/rewardUI.js';
+import { readWeeklyRewards } from './web3/arsenal.js';
 import { avatarImg, currentPlayer, initWalletUI } from './ui/walletUI.js';
 import { api } from './web3/api.js';
 import { getPilotName, rememberNames, shortAddress } from './web3/profile.js';
@@ -38,6 +40,7 @@ let rankedRun = null; // { ticket, seed, arena, mode } for ranked runs, null oth
 let lastMode = { daily: false }; // what "MAIN LAGI" repeats
 let lastRun = null;
 let chainBoard = null; // last on-chain leaderboard read
+let weeklyRewards = null; // VXL per rank, read once from the token
 
 async function getGame() {
   if (!game) {
@@ -230,13 +233,15 @@ async function loadChainBoard() {
   const body = $('#lb-chain-body');
   if (!LEADERBOARD_ADDRESS) {
     $('#lb-meta').textContent = `Contract belum di-deploy di ${TARGET_CHAIN.name}.`;
-    messageRow(body, 5, 'Leaderboard on-chain belum tersedia.');
+    messageRow(body, 6, 'Leaderboard on-chain belum tersedia.');
     return;
   }
   $('#lb-refresh').disabled = true;
   try {
     chainBoard = await readLeaderboard();
+    weeklyRewards ??= await readWeeklyRewards().catch(() => null);
     renderChainBoard();
+    refreshReward(chainBoard.week, weeklyRewards);
     // Other pilots' names live on the server; fill them in once they arrive.
     const addresses = chainBoard.top.map((e) => e.player);
     if (addresses.length) {
@@ -251,7 +256,7 @@ async function loadChainBoard() {
   } catch {
     chainBoard = null;
     $('#lb-meta').textContent = `Gagal membaca ${TARGET_CHAIN.name}.`;
-    messageRow(body, 5, 'Leaderboard on-chain tidak bisa dimuat. Coba muat ulang.');
+    messageRow(body, 6, 'Leaderboard on-chain tidak bisa dimuat. Coba muat ulang.');
   } finally {
     $('#lb-refresh').disabled = false;
   }
@@ -270,7 +275,7 @@ function renderChainBoard() {
     `Minggu #${chainBoard.week} · reset ${reset} · ${TARGET_CHAIN.name} · ${shortAddress(LEADERBOARD_ADDRESS)}`;
   const body = $('#lb-chain-body');
   if (!chainBoard.top.length) {
-    messageRow(body, 5, 'Belum ada skor minggu ini. Jadilah yang pertama!');
+    messageRow(body, 6, 'Belum ada skor minggu ini. Jadilah yang pertama!');
     return;
   }
   const me = currentPlayer()?.address?.toLowerCase();
@@ -284,6 +289,9 @@ function renderChainBoard() {
       score.textContent = fmt(e.score);
       const wave = document.createElement('td');
       wave.textContent = e.wave;
+      const reward = document.createElement('td');
+      reward.className = 'reward';
+      reward.textContent = weeklyRewards ? `${weeklyRewards[i]} VXL` : '—';
       const watch = document.createElement('td');
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -291,7 +299,7 @@ function renderChainBoard() {
       btn.textContent = 'TONTON';
       btn.addEventListener('click', () => watchReplay({ week: chainBoard.week, player: e.player }));
       watch.append(btn);
-      tr.append(rank, pilotCell(e.player), score, wave, watch);
+      tr.append(rank, pilotCell(e.player), score, wave, reward, watch);
       return tr;
     }),
   );
@@ -445,8 +453,10 @@ initWalletUI({
     renderLeaderboard();
     renderChainBoard();
     renderDaily();
+    if (chainBoard) refreshReward(chainBoard.week, weeklyRewards);
   },
 });
 loadChainBoard();
 initArsenalUI();
 initDailyUI({ onPlay: () => startGame({ daily: true }), onWatch: watchReplay });
+initRewardUI({ onClaimed: () => refreshArsenal() });

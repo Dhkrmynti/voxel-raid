@@ -204,6 +204,15 @@
             Leaderboard on-chain direset tiap minggu. Untuk masuk ke sana, connect wallet, aktifkan mode ranked, lalu kirim skormu
             setelah game over.
           </p>
+          <div class="reward-card" id="reward-card" hidden>
+            <div>
+              <span class="reward-label">HADIAH MINGGU LALU</span>
+              <b id="reward-title"></b>
+            </div>
+            <b class="reward-amount" id="reward-amount"></b>
+            <button class="btn btn-primary btn-sm" type="button" id="reward-btn" hidden>CLAIM HADIAH</button>
+            <p class="reward-note" id="reward-note" role="status"></p>
+          </div>
           <div class="tabs" role="tablist" aria-label="Jenis leaderboard">
             <button class="tab" role="tab" id="tab-chain" aria-selected="true" aria-controls="lb-chain" data-tab="chain">
               ON-CHAIN · MINGGU INI
@@ -233,6 +242,7 @@
                     <th>Pilot</th>
                     <th>Skor</th>
                     <th>Wave</th>
+                    <th>Hadiah</th>
                     <th><span class="sr-only">Replay</span></th>
                   </tr>
                 </thead>

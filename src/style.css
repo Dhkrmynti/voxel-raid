@@ -1878,3 +1878,49 @@ dialog.modal::backdrop {
   width: 0;
   background: var(--cyan);
 }
+
+/* ---------- weekly reward ---------- */
+
+.reward-card {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 3px var(--yellow),
+    6px 6px 0 #000;
+}
+
+.reward-label {
+  display: block;
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: var(--yellow);
+  margin-bottom: 8px;
+}
+
+.reward-amount {
+  font-family: var(--pixel);
+  font-size: 16px;
+  color: var(--yellow);
+}
+
+.reward-note {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+.reward-note:empty {
+  display: none;
+}
+
+.reward-note.error {
+  color: var(--red);
+}
+
+.table td.reward {
+  color: var(--yellow);
+}

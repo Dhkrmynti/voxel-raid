@@ -71,6 +71,27 @@ async function sendTx(params, onStep) {
   return hash;
 }
 
+/** VXL bonus for weekly ranks 1–10. */
+export async function readWeeklyRewards() {
+  const values = await Promise.all(Array.from({ length: 10 }, (_, i) => tokenCall('weeklyRewards', [BigInt(i)])));
+  return values.map(Number);
+}
+
+/** The pilot's rank on `week`, whether they claimed, and when claiming opens (ms). */
+export async function readRewardStatus(week, address) {
+  const [rank, claimed, opensAt] = await Promise.all([
+    tokenCall('rankOf', [BigInt(week), address]),
+    tokenCall('weeklyRewardClaimed', [BigInt(week), address]),
+    tokenCall('rewardOpensAt', [BigInt(week)]),
+  ]);
+  return { rank: Number(rank), claimed, opensAt: Number(opensAt) * 1000 };
+}
+
+export async function claimWeeklyReward(week, onStep) {
+  await ensureChain(onStep);
+  return sendTx({ address: TOKEN_ADDRESS, abi: tokenAbi, functionName: 'claimWeeklyReward', args: [BigInt(week)] }, onStep);
+}
+
 export async function claimTokens(onStep) {
   await ensureChain(onStep);
   return sendTx({ address: TOKEN_ADDRESS, abi: tokenAbi, functionName: 'claim' }, onStep);

@@ -101,6 +101,9 @@ const REVERT_MESSAGES = {
   EnforcedPause: 'Sedang dalam pemeliharaan (dijeda sementara). Coba lagi nanti.',
   DailyCapReached: 'Batas claim VXL global hari ini sudah tercapai. Coba lagi besok, token kamu tetap aman.',
   RunOverCap: 'Hasil run melebihi batas per run yang diizinkan.',
+  RewardNotOpen: 'Hadiah minggu ini belum bisa di-claim.',
+  RewardAlreadyClaimed: 'Hadiah minggu ini sudah di-claim.',
+  NotInTop: 'Kamu tidak masuk top 10 minggu itu.',
 };
 
 // Walks wagmi/viem error causes to produce a short, human message.
