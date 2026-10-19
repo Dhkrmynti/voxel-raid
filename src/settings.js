@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   touchSensitivity: 1,
   invertY: false,
   fov: 75,
+  flashes: true,
 });
 
 export function loadSettings() {

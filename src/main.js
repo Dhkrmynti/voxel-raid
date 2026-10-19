@@ -1,5 +1,5 @@
 import './style.css';
-import { sfx } from './game/audio.js';
+import { sfx, unlockAudioOnFirstGesture } from './game/audio.js';
 import { music } from './game/music.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings.js';
 import { loadScores, playerSummary, saveScore } from './scores.js';
@@ -16,6 +16,7 @@ import { LEADERBOARD_ADDRESS, rankedState, readLeaderboard, startRankedRun, subm
 import { TARGET_CHAIN, walletErrorText } from './web3/wallet.js';
 
 const $ = (s) => document.querySelector(s);
+unlockAudioOnFirstGesture();
 const landing = $('#landing');
 const heroCanvas = $('#hero-canvas');
 const gameEl = $('#game');

@@ -1,6 +1,6 @@
 // Procedural chiptune soundtrack: a lookahead scheduler plays bass, arpeggio, lead and drums
 // from tiny patterns. Three intensities: 0 = calm (between waves), 1 = combat, 2 = boss.
-import { audioContext } from './audio.js';
+import { audioContext, existingAudioContext } from './audio.js';
 
 // A minor: Am – F – C – G, one bar each (MIDI note numbers).
 const PROGRESSION = [
@@ -139,7 +139,7 @@ export const music = {
     if (!playing) return;
     playing = false;
     clearInterval(timer);
-    const c = audioContext();
+    const c = existingAudioContext();
     out.gain.cancelScheduledValues(c.currentTime);
     out.gain.setValueAtTime(out.gain.value, c.currentTime);
     out.gain.linearRampToValueAtTime(0, c.currentTime + fade);
@@ -152,18 +152,18 @@ export const music = {
   },
   setMuted(value) {
     muted = value;
-    const c = audioContext();
+    const c = existingAudioContext();
     if (out && c) out.gain.setValueAtTime(level(), c.currentTime);
   },
   /** 0–1, on top of the mix level. */
   setVolume(value) {
     volume = value;
-    const c = audioContext();
+    const c = existingAudioContext();
     if (out && c) out.gain.setValueAtTime(level(), c.currentTime);
   },
   /** 1 exactly on a beat, decaying to 0 — drives the arena's neon pulse. */
   pulse() {
-    const c = audioContext();
+    const c = existingAudioContext();
     if (!c || !playing) return 0;
     let since = Infinity;
     for (const b of beats) if (b <= c.currentTime) since = Math.min(since, c.currentTime - b);

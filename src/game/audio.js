@@ -12,6 +12,36 @@ export function audioContext() {
   return ac();
 }
 
+/** The AudioContext if one exists, without creating it (settings must not create it early). */
+export function existingAudioContext() {
+  return ctx;
+}
+
+/**
+ * Browsers only let audio start from inside a user gesture, and a context created before one
+ * starts out suspended. Unlock on the very first click, tap or key press anywhere on the page,
+ * synchronously inside that event, so later sounds (after awaits, timers) are allowed to play.
+ */
+export function unlockAudioOnFirstGesture() {
+  const events = ['pointerdown', 'touchend', 'keydown'];
+  const unlock = () => {
+    const c = ac();
+    if (!c) return;
+    // iOS Safari only really starts output once something plays inside the gesture.
+    const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, c.sampleRate);
+    src.connect(c.destination);
+    src.start();
+    if (c.state === 'running') events.forEach((e) => document.removeEventListener(e, unlock, true));
+    else
+      c.resume().then(
+        () => events.forEach((e) => document.removeEventListener(e, unlock, true)),
+        () => {},
+      );
+  };
+  events.forEach((e) => document.addEventListener(e, unlock, true));
+}
+
 // Voices route through a stereo panner while a positional sound plays.
 function output(c) {
   if (!spot) return master;
@@ -30,7 +60,7 @@ function ac() {
     master.gain.value = MASTER * volume;
     master.connect(ctx.destination);
   }
-  if (ctx.state === 'suspended') ctx.resume();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {}); // retried on the next gesture
   return ctx;
 }
 

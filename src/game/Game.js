@@ -22,7 +22,12 @@ const QUALITY = {
   high: { pixelScale: 3, glow: true, particles: 400, dust: true },
   low: { pixelScale: 4, glow: false, particles: 160, dust: false },
 };
-const SLOW_FRAME = 1 / 42; // auto quality drops when frames average slower than this
+const SLOW_FRAME = 1 / 42; // auto quality drops when the typical frame is slower than this
+// The first seconds of a run compile shaders (new enemies, first explosion) and stutter on any
+// machine, so AUTO only starts judging after this warm-up, and only drops after two slow windows.
+const QUALITY_WARMUP_SEC = 4;
+const QUALITY_WINDOW = 120;
+const MAX_FLASH = 0.4; // screen flashes stay well short of a full white-out
 const MAX_STEPS_PER_FRAME = 5;
 const REPLAY_SPEEDS = [1, 2, 4];
 const BASE_FOV = 75;
@@ -201,6 +206,7 @@ export class Game {
   setQualityMode(mode) {
     this.qualityMode = mode;
     this.frameTimes = [];
+    this.slowWindows = 0;
     this.applyQuality(mode === 'low' || (mode === 'auto' && this.touch) ? QUALITY.low : QUALITY.high);
   }
 
@@ -213,12 +219,16 @@ export class Game {
   }
 
   watchFrameRate(dt) {
-    if (this.qualityMode !== 'auto' || this.quality === QUALITY.low) return;
+    if (this.qualityMode !== 'auto' || this.quality === QUALITY.low || this.sim.time < QUALITY_WARMUP_SEC) return;
     this.frameTimes.push(dt);
-    if (this.frameTimes.length < 180) return;
-    const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
+    if (this.frameTimes.length < QUALITY_WINDOW) return;
+    // The median ignores one-off hitches (garbage collection, a tab switch) that a mean would not.
+    const median = this.frameTimes.sort((a, b) => a - b)[QUALITY_WINDOW >> 1];
     this.frameTimes = [];
-    if (avg > SLOW_FRAME) this.applyQuality(QUALITY.low);
+    this.slowWindows = median > SLOW_FRAME ? (this.slowWindows ?? 0) + 1 : 0;
+    if (this.slowWindows < 2) return;
+    this.applyQuality(QUALITY.low);
+    this.showCallout('GRAFIS DITURUNKAN KE RENDAH (FPS RENDAH)', 'power');
   }
 
   bindInput() {
@@ -282,8 +292,10 @@ export class Game {
   }
 
   /** Applies { sensitivity, touchSensitivity, invertY, fov } from the player's settings. */
-  setControls({ sensitivity, touchSensitivity, invertY, fov }) {
+  setControls({ sensitivity, touchSensitivity, invertY, fov, flashes = true }) {
     this.controls = { sensitivity, touchSensitivity, invertY, fov };
+    // Screen flashes and camera shake, off for players who asked their OS for less motion.
+    this.flashes = flashes && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   }
 
   nextWeapon(dir) {
@@ -846,7 +858,8 @@ export class Game {
   }
 
   screenFlash(strength) {
-    this.flashOverlay = Math.min(1, Math.max(this.flashOverlay, strength));
+    if (this.flashes === false) return;
+    this.flashOverlay = Math.min(MAX_FLASH, Math.max(this.flashOverlay, strength));
   }
 
   /** Stereo position of a world point relative to where the player is looking. */
@@ -868,7 +881,7 @@ export class Game {
     const bob = Math.sin(this.bobPhase) * 0.05 * moveF;
 
     this.shake = Math.max(0, this.shake - dt * 2.5);
-    const sh = this.shake * this.shake * 0.4;
+    const sh = this.flashes === false ? 0 : this.shake * this.shake * 0.4;
     cam.position.set(
       p.x + (Math.random() - 0.5) * sh,
       EYE_HEIGHT + p.y + bob + (Math.random() - 0.5) * sh,
