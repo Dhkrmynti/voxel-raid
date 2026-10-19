@@ -818,6 +818,7 @@ export class Game {
 
   updateView(dt) {
     if (this.state === 'over' || (this.state === 'replay-end' && this.sim.over)) {
+      if (this.deathT === 0) this.updateHud(0); // show the killing blow (HP 0) before the HUD freezes
       this.deathT += dt;
       this.guns.forEach((g) => (g.group.visible = false));
       this.camera.position.y = Math.max(0.35, this.camera.position.y - dt * 2.5);

@@ -1,5 +1,6 @@
 // First-run tutorial: one hint at a time, each finished by actually doing it.
 // Purely a view on top of the sim's state and events, so it never affects a replay.
+const MIN_STEP_SEC = 2; // a step the player already did still shows long enough to read
 const STEPS = [
   {
     text: { desktop: 'GERAK DENGAN W A S D', touch: 'GESER JOYSTICK DI KIRI UNTUK BERGERAK' },
@@ -69,7 +70,7 @@ export class Tutorial {
     if (this.last) this.progress.moved += Math.hypot(p.x - this.last.x, p.z - this.last.z);
     this.last = { x: p.x, z: p.z };
     this.progress.inStep += dt;
-    if (!STEPS[this.step].done(this.progress)) return;
+    if (this.progress.inStep < MIN_STEP_SEC || !STEPS[this.step].done(this.progress)) return;
     this.step++;
     this.progress.inStep = 0;
     if (this.step >= STEPS.length) this.finish();

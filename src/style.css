@@ -1540,14 +1540,14 @@ dialog.modal::backdrop {
   margin-left: -22px;
 }
 
-/* HUD moves up out of the thumbs' way */
+/* HUD moves up out of the thumbs' way, just below the wave/score blocks */
 #game.touch .hud-bl {
-  top: 120px;
+  top: 136px;
   bottom: auto;
 }
 
 #game.touch .hud-br {
-  top: 120px;
+  top: 136px;
   bottom: auto;
 }
 

@@ -45,19 +45,25 @@ function render() {
  * @param {number} currentWeek the leaderboard's running week; rewards are for the one before
  * @param {number[]} rewards VXL per rank
  */
+let refreshReq = 0; // a slow read for a previous wallet must not overwrite the current one
+
 export async function refreshReward(currentWeek, rewards) {
   const p = currentPlayer();
+  const req = ++refreshReq;
   if (!p || !TOKEN_ADDRESS || !rewards) {
     state = null;
     return render();
   }
   const week = currentWeek - 1;
+  let next = null;
   try {
     const s = await readRewardStatus(week, p.address);
-    state = { week, ...s, reward: s.rank ? rewards[s.rank - 1] : 0 };
+    next = { week, ...s, reward: s.rank ? rewards[s.rank - 1] : 0 };
   } catch {
-    state = null;
+    // unknown: the card stays hidden
   }
+  if (req !== refreshReq) return;
+  state = next;
   render();
 }
 
