@@ -21,12 +21,16 @@ const input = {
   },
 };
 
+// Local files (e.g. ./Guarded.sol) first, then packages such as @openzeppelin.
 function findImports(importPath) {
-  try {
-    return { contents: readFileSync(require.resolve(importPath), 'utf8') };
-  } catch {
-    return { error: `File not found: ${importPath}` };
+  for (const resolve of [() => path.join(dir, importPath), () => require.resolve(importPath)]) {
+    try {
+      return { contents: readFileSync(resolve(), 'utf8') };
+    } catch {
+      // try the next location
+    }
   }
+  return { error: `File not found: ${importPath}` };
 }
 
 const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));

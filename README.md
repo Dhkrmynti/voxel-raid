@@ -71,6 +71,12 @@ pemain ── permit (tanda tangan) + buy ─────▶ VoxelArsenal    →
   kecepatan reaksi yang tidak manusiawi) dan rate limit per wallet.
 - Biaya verifikasi: ~13 ms CPU per menit permainan.
 
+Pengamanan contract (detail lengkap dan runbook insiden ada di [SECURITY.md](SECURITY.md)):
+- Batas skor dan token per run, serta batas claim VXL harian global (circuit breaker).
+- `pause()` darurat oleh **guardian** (kunci yang hanya bisa menjeda), `unpause()` hanya oleh owner.
+- Kepemilikan dua langkah (Ownable2Step), disiapkan untuk Safe multisig.
+- Owner bisa merotasi signer dan menghapus entri leaderboard palsu.
+
 Kontrak:
 - **VoxelRaidLeaderboard**: hanya menerima skor yang ditandatangani signer server, untuk `msg.sender` itu sendiri
   (atestasi curian dari mempool tidak bisa dipakai), dengan deadline, dan setiap sessionId hanya bisa dipakai sekali.

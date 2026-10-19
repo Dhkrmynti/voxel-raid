@@ -2,6 +2,10 @@
 // addresses in src/web3/deployments.json.
 //   Local Anvil:              CHAIN=anvil node --env-file=.env.local scripts/deploy.mjs
 //   Robinhood Chain testnet:  set CHAIN=robinhoodTestnet and DEPLOYER_KEY yourself (never commit it)
+// Optional:
+//   GUARDIAN=0x…     key allowed to pause (and only pause) all three contracts
+//   FINAL_OWNER=0x…  e.g. a Safe multisig; ownership transfer is started here and must be
+//                    completed by calling acceptOwnership() on each contract from that address
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -54,7 +58,7 @@ export async function deploy({
 
   log(`Deploying to ${chain.name} (${chain.id}) from ${account.address}…`);
   const leaderboard = await deployContract('VoxelRaidLeaderboard', [signer, account.address]);
-  const token = await deployContract('VoxelToken', [leaderboard]);
+  const token = await deployContract('VoxelToken', [leaderboard, account.address]);
   const arsenal = await deployContract('VoxelArsenal', [token, account.address]);
 
   const { abi: arsenalAbi } = artifact('VoxelArsenal');
@@ -68,6 +72,26 @@ export async function deploy({
     await client.waitForTransactionReceipt({ hash });
   }
   log(`Listed ${SKINS.length} skins (server signer ${signer})`);
+
+  const contracts = [
+    ['VoxelRaidLeaderboard', leaderboard],
+    ['VoxelToken', token],
+    ['VoxelArsenal', arsenal],
+  ];
+  async function callAll(functionName, args) {
+    for (const [name, address] of contracts) {
+      const hash = await wallet.writeContract({ address, abi: artifact(name).abi, functionName, args });
+      await client.waitForTransactionReceipt({ hash });
+    }
+  }
+  if (process.env.GUARDIAN) {
+    await callAll('setGuardian', [process.env.GUARDIAN]);
+    log(`Guardian (pause only): ${process.env.GUARDIAN}`);
+  }
+  if (process.env.FINAL_OWNER) {
+    await callAll('transferOwnership', [process.env.FINAL_OWNER]);
+    log(`Ownership transfer started to ${process.env.FINAL_OWNER}; call acceptOwnership() on all three contracts from it.`);
+  }
 
   const addresses = { leaderboard, token, arsenal };
   if (record) {

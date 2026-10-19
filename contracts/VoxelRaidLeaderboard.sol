@@ -4,12 +4,16 @@ pragma solidity ^0.8.24;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {Guarded} from "./Guarded.sol";
 
 /// @title VOXEL//RAID weekly leaderboard
 /// @notice Players submit their own scores, but every score must carry an EIP-712
-///         attestation from the game server, which validated the run off-chain.
+///         attestation from the game server, which re-simulated the run off-chain.
 ///         Each attested game session can only be used once.
-contract VoxelRaidLeaderboard is EIP712, Ownable {
+/// @dev Defence in depth against a leaked signer key: per-run caps bound what one forged
+///      attestation can claim, the guardian can pause submissions at once, the owner can
+///      rotate the signer and remove forged entries.
+contract VoxelRaidLeaderboard is EIP712, Guarded {
     struct Entry {
         address player;
         uint64 score;
@@ -22,6 +26,10 @@ contract VoxelRaidLeaderboard is EIP712, Ownable {
     uint256 public constant TOP_N = 10;
 
     address public signer;
+    /// @notice Upper bounds for a single run. Far above anything the game produces, low enough
+    ///         that one forged attestation can't top the board absurdly or mint a fortune.
+    uint64 public maxScorePerRun = 50_000_000;
+    uint32 public maxTokensPerRun = 5_000;
 
     mapping(bytes32 sessionId => bool) public usedSessions;
     mapping(uint256 week => mapping(address player => uint64)) public bestScore;
@@ -39,11 +47,15 @@ contract VoxelRaidLeaderboard is EIP712, Ownable {
         bytes32 sessionId
     );
     event SignerUpdated(address indexed signer);
+    event RunCapsUpdated(uint64 maxScorePerRun, uint32 maxTokensPerRun);
+    event EntryRemoved(uint256 indexed week, address indexed player);
 
     error AttestationExpired();
     error SessionAlreadyUsed();
     error InvalidAttestation();
+    error RunOverCap();
     error ZeroAddress();
+    error EntryNotFound();
 
     constructor(address signer_, address owner_) EIP712("VoxelRaid", "1") Ownable(owner_) {
         _setSigner(signer_);
@@ -62,9 +74,10 @@ contract VoxelRaidLeaderboard is EIP712, Ownable {
         bytes32 sessionId,
         uint64 deadline,
         bytes calldata signature
-    ) external {
+    ) external whenNotPaused {
         if (block.timestamp > deadline) revert AttestationExpired();
         if (usedSessions[sessionId]) revert SessionAlreadyUsed();
+        if (score > maxScorePerRun || tokens > maxTokensPerRun) revert RunOverCap();
 
         bytes32 structHash =
             keccak256(abi.encode(SCORE_TYPEHASH, msg.sender, score, wave, kills, tokens, sessionId, deadline));
@@ -90,8 +103,30 @@ contract VoxelRaidLeaderboard is EIP712, Ownable {
         return _domainSeparatorV4();
     }
 
+    // ---------- owner ----------
+
     function setSigner(address signer_) external onlyOwner {
         _setSigner(signer_);
+    }
+
+    function setRunCaps(uint64 maxScore, uint32 maxTokens) external onlyOwner {
+        maxScorePerRun = maxScore;
+        maxTokensPerRun = maxTokens;
+        emit RunCapsUpdated(maxScore, maxTokens);
+    }
+
+    /// @notice Incident response: drops a forged entry from a week's board. The freed slot is
+    ///         not back-filled (scores below the top 10 are not stored on-chain).
+    function removeEntry(uint256 week, address player) external onlyOwner {
+        Entry[] storage top = _top[week];
+        uint256 len = top.length;
+        uint256 i;
+        while (i < len && top[i].player != player) ++i;
+        if (i == len) revert EntryNotFound();
+        for (; i + 1 < len; ++i) top[i] = top[i + 1];
+        top.pop();
+        bestScore[week][player] = 0;
+        emit EntryRemoved(week, player);
     }
 
     function _setSigner(address signer_) private {

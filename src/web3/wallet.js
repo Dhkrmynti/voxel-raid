@@ -98,6 +98,9 @@ const REVERT_MESSAGES = {
   NothingToClaim: 'Belum ada token yang bisa di-claim.',
   ERC20InsufficientBalance: 'Saldo VXL tidak cukup.',
   ItemInactive: 'Skin ini sedang tidak dijual.',
+  EnforcedPause: 'Sedang dalam pemeliharaan (dijeda sementara). Coba lagi nanti.',
+  DailyCapReached: 'Batas claim VXL global hari ini sudah tercapai. Coba lagi besok, token kamu tetap aman.',
+  RunOverCap: 'Hasil run melebihi batas per run yang diizinkan.',
 };
 
 // Walks wagmi/viem error causes to produce a short, human message.

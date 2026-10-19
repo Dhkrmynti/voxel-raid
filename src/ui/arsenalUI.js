@@ -156,8 +156,8 @@ async function runTx(fn, successText) {
   render();
   try {
     await fn((step) => setStatus(STEP_TEXT[step]));
-    setStatus(successText);
     await refresh();
+    setStatus(typeof successText === 'function' ? successText() : successText);
   } catch (err) {
     setStatus(walletErrorText(err), true);
   } finally {
@@ -186,7 +186,14 @@ export async function refresh() {
 
 export function initArsenalUI() {
   $('#claim-btn').addEventListener('click', () =>
-    runTx((onStep) => claimTokens(onStep), '✓ VXL berhasil di-claim!'),
+    runTx(
+      (onStep) => claimTokens(onStep),
+      // The global daily cap may let only part of a claim through; the rest waits for tomorrow.
+      () =>
+        player?.claimable > 0
+          ? `✓ Sebagian VXL di-claim. Batas harian tercapai, sisa ${fmt(player.claimable)} bisa di-claim besok.`
+          : '✓ VXL berhasil di-claim!',
+    ),
   );
   let lastAddress;
   wallet.subscribe((s) => {

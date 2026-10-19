@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Guarded} from "./Guarded.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
@@ -12,7 +13,8 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 /// @title VOXEL//RAID Arsenal
 /// @notice Cosmetic weapon skins as ERC-721 tokens, bought by burning VXL.
 ///         Artwork and metadata are generated fully on-chain.
-contract VoxelArsenal is ERC721Enumerable, Ownable {
+///         Purchases can be paused by the guardian or owner (see Guarded).
+contract VoxelArsenal is ERC721Enumerable, Guarded {
     using Strings for uint256;
 
     struct Item {
@@ -90,7 +92,7 @@ contract VoxelArsenal is ERC721Enumerable, Ownable {
         return _purchase(itemId);
     }
 
-    function _purchase(uint256 itemId) private returns (uint256 tokenId) {
+    function _purchase(uint256 itemId) private whenNotPaused returns (uint256 tokenId) {
         Item storage it = _item(itemId);
         if (!it.active) revert ItemInactive();
         token.burnFrom(msg.sender, it.price);
