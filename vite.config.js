@@ -12,7 +12,8 @@ export default defineConfig({
         // Big libraries get their own long-lived cache entries.
         manualChunks(id) {
           if (id.includes('node_modules/three/')) return 'three';
-          if (/node_modules\/(viem|@wagmi|ox|abitype|@noble|@scure|@adraffy|zustand|mipd|eventemitter3)\//.test(id)) return 'web3';
+          if (/node_modules\/(viem|@wagmi|ox|abitype|@noble|@scure|@adraffy|zustand|mipd|eventemitter3)\//.test(id))
+            return 'web3';
         },
       },
     },

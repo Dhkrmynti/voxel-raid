@@ -127,8 +127,7 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
     await next();
   };
 
-  const maxBody = (maxSize) =>
-    bodyLimit({ maxSize, onError: (c) => c.json({ error: 'Permintaan terlalu besar.' }, 413) });
+  const maxBody = (maxSize) => bodyLimit({ maxSize, onError: (c) => c.json({ error: 'Permintaan terlalu besar.' }, 413) });
 
   const requireSession = async (c, next) => {
     const session = unseal(getCookie(c, SESSION_COOKIE), 'session');
@@ -172,9 +171,7 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
     // Checks domain, nonce, validity window and the signature (incl. smart-contract wallets).
     // SIWE_DOMAIN pins the expected site; forwarded headers are spoofable, so they are never used.
     const domain = env.SIWE_DOMAIN || new URL(c.req.url).host;
-    const valid = await client
-      .verifySiweMessage({ message, signature, domain, nonce: nonce.nonce })
-      .catch(() => false);
+    const valid = await client.verifySiweMessage({ message, signature, domain, nonce: nonce.nonce }).catch(() => false);
     if (!valid) return c.json({ error: 'Tanda tangan tidak valid.' }, 401);
 
     const address = getAddress(fields.address);
@@ -210,57 +207,58 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
     rateLimit('finishIp', 'ip'),
     rateLimit('finish', 'wallet'),
     async (c) => {
-    const { address } = c.get('session');
-    const body = await readJson(c);
-    const ticket = unseal(body?.ticket, 'ticket');
-    if (!ticket || ticket.address !== address) return c.json({ error: 'Tiket game tidak valid atau kedaluwarsa.' }, 400);
+      const { address } = c.get('session');
+      const body = await readJson(c);
+      const ticket = unseal(body?.ticket, 'ticket');
+      if (!ticket || ticket.address !== address) return c.json({ error: 'Tiket game tidak valid atau kedaluwarsa.' }, 400);
 
-    if (body.simVersion !== SIM_VERSION) {
-      return c.json({ error: 'Versi game berbeda dengan server. Muat ulang halaman lalu main lagi.' }, 409);
-    }
+      if (body.simVersion !== SIM_VERSION) {
+        return c.json({ error: 'Versi game berbeda dengan server. Muat ulang halaman lalu main lagi.' }, 409);
+      }
 
-    // Re-simulate the run from the server's seed and the recorded inputs; only that result counts.
-    if (typeof body.replay !== 'string' || body.replay.length > MAX_REPLAY_BASE64) {
-      return c.json({ error: 'Replay tidak ada atau terlalu besar.' }, 400);
-    }
-    let inputs;
-    try {
-      const raw = gunzipSync(Buffer.from(body.replay, 'base64'), { maxOutputLength: MAX_REPLAY_BYTES });
-      inputs = decodeReplay(raw, MAX_REPLAY_TICKS);
-    } catch {
-      return c.json({ error: 'Replay tidak valid.' }, 400);
-    }
-    // Cheap check first: a run can't contain more ticks than real time allows, so reject
-    // over-long replays before spending CPU on re-simulating them.
-    const elapsed = (now() - ticket.startedAt) / 1000;
-    if (inputs.length * TICK > elapsed + REALTIME_SLACK_SEC) {
-      return c.json({ error: 'Run berjalan lebih cepat dari waktu nyata.' }, 422);
-    }
-    const result = replayRun(ticket.seed, inputs);
-    if (!result.ok) return c.json({ error: result.error }, 422);
-    const stats = result.stats;
-    if (STAT_KEYS.some((k) => body[k] !== stats[k])) {
-      return c.json({ error: 'Hasil replay tidak cocok dengan skor yang dikirim.' }, 422);
-    }
-    const problem = validateRun(stats, elapsed);
-    if (problem) return c.json({ error: problem }, 422);
-    const run = { score: stats.score, wave: stats.wave, kills: stats.kills, tokens: stats.tokens };
+      // Re-simulate the run from the server's seed and the recorded inputs; only that result counts.
+      if (typeof body.replay !== 'string' || body.replay.length > MAX_REPLAY_BASE64) {
+        return c.json({ error: 'Replay tidak ada atau terlalu besar.' }, 400);
+      }
+      let inputs;
+      try {
+        const raw = gunzipSync(Buffer.from(body.replay, 'base64'), { maxOutputLength: MAX_REPLAY_BYTES });
+        inputs = decodeReplay(raw, MAX_REPLAY_TICKS);
+      } catch {
+        return c.json({ error: 'Replay tidak valid.' }, 400);
+      }
+      // Cheap check first: a run can't contain more ticks than real time allows, so reject
+      // over-long replays before spending CPU on re-simulating them.
+      const elapsed = (now() - ticket.startedAt) / 1000;
+      if (inputs.length * TICK > elapsed + REALTIME_SLACK_SEC) {
+        return c.json({ error: 'Run berjalan lebih cepat dari waktu nyata.' }, 422);
+      }
+      const result = replayRun(ticket.seed, inputs);
+      if (!result.ok) return c.json({ error: result.error }, 422);
+      const stats = result.stats;
+      if (STAT_KEYS.some((k) => body[k] !== stats[k])) {
+        return c.json({ error: 'Hasil replay tidak cocok dengan skor yang dikirim.' }, 422);
+      }
+      const problem = validateRun(stats, elapsed);
+      if (problem) return c.json({ error: problem }, 422);
+      const run = { score: stats.score, wave: stats.wave, kills: stats.kills, tokens: stats.tokens };
 
-    const verifyingContract = contractAddress();
-    if (!verifyingContract) return c.json({ error: `Contract belum di-deploy di ${chain.name}.` }, 503);
+      const verifyingContract = contractAddress();
+      if (!verifyingContract) return c.json({ error: `Contract belum di-deploy di ${chain.name}.` }, 503);
 
-    const deadline = BigInt(Math.floor(now() / 1000) + ATTESTATION_TTL_SEC);
-    const signature = await signer.signTypedData({
-      domain: { name: 'VoxelRaid', version: '1', chainId: chain.id, verifyingContract },
-      types: SCORE_TYPES,
-      primaryType: 'Score',
-      message: { player: address, ...run, score: BigInt(run.score), sessionId: ticket.sessionId, deadline },
-    });
-    return c.json({
-      attestation: { ...run, sessionId: ticket.sessionId, deadline: deadline.toString(), contract: verifyingContract },
-      signature,
-    });
-  });
+      const deadline = BigInt(Math.floor(now() / 1000) + ATTESTATION_TTL_SEC);
+      const signature = await signer.signTypedData({
+        domain: { name: 'VoxelRaid', version: '1', chainId: chain.id, verifyingContract },
+        types: SCORE_TYPES,
+        primaryType: 'Score',
+        message: { player: address, ...run, score: BigInt(run.score), sessionId: ticket.sessionId, deadline },
+      });
+      return c.json({
+        attestation: { ...run, sessionId: ticket.sessionId, deadline: deadline.toString(), contract: verifyingContract },
+        signature,
+      });
+    },
+  );
 
   return app;
 }

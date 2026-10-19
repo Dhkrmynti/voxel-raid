@@ -22,8 +22,7 @@ function write(key, value) {
 // Guest stats keep the original key so phase-1 progress carries over.
 const statsKey = (address) => (address ? `${STATS_KEY}:${address.toLowerCase()}` : STATS_KEY);
 
-const isPlayer = (entry, address) =>
-  address ? entry.player?.address?.toLowerCase() === address.toLowerCase() : !entry.player;
+const isPlayer = (entry, address) => (address ? entry.player?.address?.toLowerCase() === address.toLowerCase() : !entry.player);
 
 export function loadScores() {
   const list = read(SCORES_KEY, []);

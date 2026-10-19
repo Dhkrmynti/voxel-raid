@@ -11,7 +11,18 @@ export const ENEMY_TYPES = {
 
 export const WEAPONS = [
   { id: 'pulse', name: 'PULSE', dmg: 20, pellets: 1, interval: 0.11, mag: 24, reload: 1.1, spread: 0.008, unlockWave: 1 },
-  { id: 'scatter', name: 'SCATTER', dmg: 11, pellets: 8, interval: 0.75, mag: 6, reload: 1.4, spread: 0.085, falloff: 40, unlockWave: 3 },
+  {
+    id: 'scatter',
+    name: 'SCATTER',
+    dmg: 11,
+    pellets: 8,
+    interval: 0.75,
+    mag: 6,
+    reload: 1.4,
+    spread: 0.085,
+    falloff: 40,
+    unlockWave: 3,
+  },
   { id: 'rail', name: 'RAIL', dmg: 85, pellets: 1, interval: 1.0, mag: 5, reload: 1.6, spread: 0, pierce: true, unlockWave: 6 },
 ];
 
@@ -57,7 +68,11 @@ export function waveRoster(n, rng) {
 
 const SCORES = Object.values(ENEMY_TYPES).map((t) => t.score);
 const MIN_ENEMY_SCORE = Math.min(...SCORES);
-const MAX_REGULAR_SCORE = Math.max(...Object.entries(ENEMY_TYPES).filter(([k]) => k !== 'boss').map(([, t]) => t.score));
+const MAX_REGULAR_SCORE = Math.max(
+  ...Object.entries(ENEMY_TYPES)
+    .filter(([k]) => k !== 'boss')
+    .map(([, t]) => t.score),
+);
 
 /**
  * Plausibility check for a finished run. The game runs on the client, so this

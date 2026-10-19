@@ -43,9 +43,16 @@ const BOSS_SCALE = 2.6;
 
 // [x, z, height] — each pillar has a 2x2 footprint
 export const PILLARS = [
-  [-12, -12, 4], [12, -12, 4], [-12, 12, 4], [12, 12, 4],
-  [0, -19, 3], [0, 19, 3], [-19, 0, 3], [19, 0, 3],
-  [-6, 5, 2], [6, -5, 2],
+  [-12, -12, 4],
+  [12, -12, 4],
+  [-12, 12, 4],
+  [12, 12, 4],
+  [0, -19, 3],
+  [0, 19, 3],
+  [-19, 0, 3],
+  [19, 0, 3],
+  [-6, 5, 2],
+  [6, -5, 2],
 ];
 
 // Hitboxes in model space (before scale), model facing +Z. `crit` marks the weak spot.
@@ -112,7 +119,17 @@ function rayBox(o, d, min, max) {
 }
 
 /** An empty input: no movement, no buttons. */
-export const idleInput = (yaw = 0, pitch = 0) => ({ mx: 0, mz: 0, yaw, pitch, fire: false, jump: false, dash: false, reload: false, weapon: -1 });
+export const idleInput = (yaw = 0, pitch = 0) => ({
+  mx: 0,
+  mz: 0,
+  yaw,
+  pitch,
+  fire: false,
+  jump: false,
+  dash: false,
+  reload: false,
+  weapon: -1,
+});
 
 export class Sim {
   constructor(seed) {
@@ -123,8 +140,22 @@ export class Sim {
     this.colliders = PILLARS.map(([x, z, h]) => ({ minX: x - 1, maxX: x + 1, minZ: z - 1, maxZ: z + 1, h }));
 
     this.player = {
-      x: 0, z: 10, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: 0, pitch: 0,
-      hp: MAX_HP, shield: 0, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0, iframes: 0,
+      x: 0,
+      z: 10,
+      y: 0,
+      vx: 0,
+      vz: 0,
+      vy: 0,
+      grounded: true,
+      yaw: 0,
+      pitch: 0,
+      hp: MAX_HP,
+      shield: 0,
+      dashT: 0,
+      dashCd: 0,
+      dashX: 0,
+      dashZ: 0,
+      iframes: 0,
     };
     this.weapons = WEAPONS.map((w) => ({ ammo: w.mag, unlocked: w.unlockWave <= 1 }));
     this.weaponIndex = 0;
@@ -167,7 +198,13 @@ export class Sim {
   }
 
   stats() {
-    return { score: Math.round(this.score), wave: this.wave, kills: this.kills, tokens: this.tokens, detonations: this.detonations };
+    return {
+      score: Math.round(this.score),
+      wave: this.wave,
+      kills: this.kills,
+      tokens: this.tokens,
+      detonations: this.detonations,
+    };
   }
 
   // ---------- step ----------
@@ -295,7 +332,12 @@ export class Sim {
 
   updateWeapon(input) {
     const dt = TICK;
-    if (input.weapon >= 0 && input.weapon < WEAPONS.length && input.weapon !== this.weaponIndex && this.weapons[input.weapon].unlocked) {
+    if (
+      input.weapon >= 0 &&
+      input.weapon < WEAPONS.length &&
+      input.weapon !== this.weaponIndex &&
+      this.weapons[input.weapon].unlocked
+    ) {
       this.weaponIndex = input.weapon;
       this.reloading = 0;
       this.cooldown = Math.max(this.cooldown, SWAP_TIME);
@@ -626,7 +668,11 @@ export class Sim {
     const tl = dhypot(tx, ty, tz) || 1;
     const aim = [tx / tl, ty / tl, tz / tl];
     if (e.type === 'shooter') {
-      this.spawnProjectile(origin, aim.map((v) => v * 13), e.def.dmg);
+      this.spawnProjectile(
+        origin,
+        aim.map((v) => v * 13),
+        e.def.dmg,
+      );
       e.shootCd = 1.4 + this.rng();
     } else {
       const cadence = e.enraged ? 0.7 : 1;
@@ -724,7 +770,11 @@ export class Sim {
       if (o.dead || o === e) continue;
       const d = dhypot(o.x - e.x, o.z - e.z);
       if (d < EXPLOSION_RADIUS + o.radius) {
-        this.damageEnemy(o, Math.round(EXPLOSION_ENEMY_DMG * (1 - (d / (EXPLOSION_RADIUS + o.radius)) * 0.5)), { x: o.x, y: 1, z: o.z });
+        this.damageEnemy(o, Math.round(EXPLOSION_ENEMY_DMG * (1 - (d / (EXPLOSION_RADIUS + o.radius)) * 0.5)), {
+          x: o.x,
+          y: 1,
+          z: o.z,
+        });
       }
     }
   }
@@ -769,7 +819,18 @@ export class Sim {
   dropPickup(kind, at) {
     const a = this.rng() * Math.PI * 2;
     const s = 1 + this.rng() * 3;
-    const pk = { id: this.nextId++, kind, x: at.x, y: Math.max(0.8, at.y), z: at.z, vx: dcos(a) * s, vz: dsin(a) * s, vy: 3, landed: false, life: 14 };
+    const pk = {
+      id: this.nextId++,
+      kind,
+      x: at.x,
+      y: Math.max(0.8, at.y),
+      z: at.z,
+      vx: dcos(a) * s,
+      vz: dsin(a) * s,
+      vy: 3,
+      landed: false,
+      life: 14,
+    };
     this.pickups.push(pk);
     this.emit({ t: 'drop', pickup: pk });
   }

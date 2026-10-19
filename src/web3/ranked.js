@@ -105,7 +105,11 @@ async function gzipBase64(bytes) {
 export async function submitRun(ticket, run, replay, onStep) {
   if (!LEADERBOARD_ADDRESS) throw new Error(`Contract belum di-deploy di ${TARGET_CHAIN.name}.`);
   onStep('validating');
-  const { attestation: a, signature } = await api.finishGame(ticket, { ...run, simVersion: SIM_VERSION, replay: await gzipBase64(replay) });
+  const { attestation: a, signature } = await api.finishGame(ticket, {
+    ...run,
+    simVersion: SIM_VERSION,
+    replay: await gzipBase64(replay),
+  });
   if (a.contract.toLowerCase() !== LEADERBOARD_ADDRESS.toLowerCase()) {
     throw new Error('Alamat contract di server berbeda dengan aplikasi. Muat ulang halaman.');
   }

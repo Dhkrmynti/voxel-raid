@@ -111,9 +111,11 @@ export function walletErrorText(err) {
     if (/InsufficientFunds/.test(e.name)) return `Saldo ETH di ${TARGET_CHAIN.name} tidak cukup untuk gas.`;
     if (/ChainMismatch/.test(e.name)) return `Ganti jaringan wallet ke ${TARGET_CHAIN.name} dulu.`;
     if (e.code === 4001 || /UserRejected/.test(e.name)) return 'Permintaan dibatalkan di wallet.';
-    if (e.code === -32002 || /ResourceUnavailable/.test(e.name)) return 'Ada permintaan yang masih menunggu. Buka ekstensi wallet kamu.';
+    if (e.code === -32002 || /ResourceUnavailable/.test(e.name))
+      return 'Ada permintaan yang masih menunggu. Buka ekstensi wallet kamu.';
     if (/AlreadyConnected/.test(e.name)) return 'Wallet sudah terhubung.';
-    if (/SwitchChainNotSupported/.test(e.name)) return 'Wallet ini tidak mendukung ganti jaringan otomatis. Ganti manual di wallet.';
+    if (/SwitchChainNotSupported/.test(e.name))
+      return 'Wallet ini tidak mendukung ganti jaringan otomatis. Ganti manual di wallet.';
   }
   return err?.shortMessage || 'Terjadi kesalahan. Coba lagi.';
 }

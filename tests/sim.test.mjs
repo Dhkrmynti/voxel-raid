@@ -48,7 +48,10 @@ describe('gameplay', () => {
   test('weapons unlock on their waves', () => {
     const { sim } = playBot(7, { untilWave: 6 });
     assert.equal(sim.wave, 6);
-    assert.deepEqual(sim.weapons.map((w) => w.unlocked), WEAPONS.map((w) => w.unlockWave <= 6));
+    assert.deepEqual(
+      sim.weapons.map((w) => w.unlocked),
+      WEAPONS.map((w) => w.unlockWave <= 6),
+    );
   });
 
   test('a head shot crits and the rail pierces every enemy in line', () => {

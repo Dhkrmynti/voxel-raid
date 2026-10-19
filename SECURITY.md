@@ -2,21 +2,21 @@
 
 ## Peran dan kunci
 
-| Peran | Disimpan di | Bisa melakukan | Tidak bisa |
-| --- | --- | --- | --- |
-| **Owner** (disarankan Safe multisig) | Safe, beberapa penanda tangan | Ganti signer, atur batas, unpause, hapus entri leaderboard, kelola katalog skin | — |
-| **Guardian** | Kunci "panas" milik tim | **Hanya `pause()`** di ketiga contract | Unpause, mengubah konfigurasi, menyentuh dana |
-| **Signer skor** | Server API (`SERVER_SIGNER_KEY`) | Menandatangani atestasi skor | Apa pun selain itu |
+| Peran                                | Disimpan di                      | Bisa melakukan                                                                  | Tidak bisa                                    |
+| ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| **Owner** (disarankan Safe multisig) | Safe, beberapa penanda tangan    | Ganti signer, atur batas, unpause, hapus entri leaderboard, kelola katalog skin | —                                             |
+| **Guardian**                         | Kunci "panas" milik tim          | **Hanya `pause()`** di ketiga contract                                          | Unpause, mengubah konfigurasi, menyentuh dana |
+| **Signer skor**                      | Server API (`SERVER_SIGNER_KEY`) | Menandatangani atestasi skor                                                    | Apa pun selain itu                            |
 
 Kepemilikan dipindah dua langkah (`transferOwnership` → `acceptOwnership` dari alamat baru), jadi salah ketik
 alamat tidak membuat contract kehilangan pemilik. Script deploy mendukung `GUARDIAN=` dan `FINAL_OWNER=`.
 
 ## Batas bawaan (bisa diubah owner)
 
-| Batas | Nilai awal | Fungsi |
-| --- | --- | --- |
-| `maxScorePerRun` | 50.000.000 | Atestasi palsu tidak bisa mendorong skor absurd ke leaderboard |
-| `maxTokensPerRun` | 5.000 | Satu atestasi palsu tidak bisa membawa token dalam jumlah besar |
+| Batas                 | Nilai awal                         | Fungsi                                                                  |
+| --------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| `maxScorePerRun`      | 50.000.000                         | Atestasi palsu tidak bisa mendorong skor absurd ke leaderboard          |
+| `maxTokensPerRun`     | 5.000                              | Satu atestasi palsu tidak bisa membawa token dalam jumlah besar         |
 | `dailyClaimCap` (VXL) | 250.000 / hari (UTC), semua pemain | Circuit breaker: kerugian maksimum per hari terbatas meski signer bocor |
 
 Claim yang melebihi sisa kuota harian akan dicetak sebagian; sisanya tetap bisa di-claim keesokan harinya.
@@ -35,7 +35,7 @@ habis jauh lebih cepat dari biasanya.
 5. **Lanjutkan** (owner): `unpause()`. Pertimbangkan menurunkan `dailyClaimCap` sementara waktu.
 6. **Catat**: alamat penyerang, jumlah VXL yang sempat dicetak, dan transaksi-transaksinya.
 
-Langkah 1–5 diuji otomatis di `tests/security.test.mjs` (*incident drill: leaked signer key*).
+Langkah 1–5 diuji otomatis di `tests/security.test.mjs` (_incident drill: leaked signer key_).
 
 ## Runbook lain
 
@@ -44,11 +44,11 @@ Langkah 1–5 diuji otomatis di `tests/security.test.mjs` (*incident drill: leak
 - **Server API diserang (CPU/DoS)**: verifikasi replay butuh ~13 ms CPU per menit permainan. Lapisan yang sudah ada:
   - Rate limit token bucket (`server/ratelimit.js`, angka di `DEFAULT_LIMITS` pada `server/app.js`):
 
-    | Endpoint | Batas |
-    | --- | --- |
-    | `/auth/nonce` | 20/menit per IP |
-    | `/auth/verify` | 10/menit per IP |
-    | `/game/start` | 60/jam per wallet |
+    | Endpoint       | Batas                              |
+    | -------------- | ---------------------------------- |
+    | `/auth/nonce`  | 20/menit per IP                    |
+    | `/auth/verify` | 10/menit per IP                    |
+    | `/game/start`  | 60/jam per wallet                  |
     | `/game/finish` | 30/jam per wallet + 120/jam per IP |
 
   - Batas ukuran body: 32 KB untuk endpoint biasa, ~4 MB untuk replay. Zip bomb ditolak saat dekompresi.

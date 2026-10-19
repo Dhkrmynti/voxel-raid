@@ -33,9 +33,9 @@ export function initWalletUI({ onChange, getStats }) {
     });
   }
 
-  document.querySelectorAll('[data-wallet]').forEach((b) =>
-    b.addEventListener('click', () => (currentPlayer() ? openProfile() : openConnect())),
-  );
+  document
+    .querySelectorAll('[data-wallet]')
+    .forEach((b) => b.addEventListener('click', () => (currentPlayer() ? openProfile() : openConnect())));
 
   // ---------- connect ----------
 

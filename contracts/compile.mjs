@@ -42,7 +42,12 @@ if (problems.some((p) => p.severity === 'error')) process.exit(1);
 mkdirSync(path.join(dir, 'out'), { recursive: true });
 for (const name of CONTRACTS) {
   const contract = output.contracts[`${name}.sol`][name];
-  const artifact = { contractName: name, compiler: solc.version(), abi: contract.abi, bytecode: `0x${contract.evm.bytecode.object}` };
+  const artifact = {
+    contractName: name,
+    compiler: solc.version(),
+    abi: contract.abi,
+    bytecode: `0x${contract.evm.bytecode.object}`,
+  };
   writeFileSync(path.join(dir, 'out', `${name}.json`), `${JSON.stringify(artifact, null, 2)}\n`);
   console.log(`Compiled ${name} (${(artifact.bytecode.length - 2) / 2} bytes)`);
 }

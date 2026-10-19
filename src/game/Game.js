@@ -267,7 +267,10 @@ export class Game {
     }
     const dustGeo = new THREE.BufferGeometry();
     dustGeo.setAttribute('position', new THREE.BufferAttribute(dust, 3));
-    this.dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xb79bff, size: 1, sizeAttenuation: false, transparent: true, opacity: 0.55 }));
+    this.dust = new THREE.Points(
+      dustGeo,
+      new THREE.PointsMaterial({ color: 0xb79bff, size: 1, sizeAttenuation: false, transparent: true, opacity: 0.55 }),
+    );
     s.add(this.dust);
   }
 
@@ -676,7 +679,7 @@ export class Game {
           break;
         case 'unlock':
           this.showBanner(`SENJATA BARU: ${WEAPONS[ev.weapon].name}`, `Tekan ${ev.weapon + 1} atau scroll untuk ganti`);
-          sfx.unlock();
+          sfx.weaponUnlock();
           break;
         case 'enrage':
           this.showCallout('RAJA VOXEL MENGAMUK!', 'danger');
@@ -845,7 +848,9 @@ export class Game {
       const mode = flashing ? 'flash' : glowing ? 'enraged' : 'base';
       if (mode !== v.mode) {
         v.mode = mode;
-        v.model.materials.forEach((m) => m.emissive.copy(mode === 'flash' ? WHITE : mode === 'enraged' ? ENRAGED : m.userData.baseEmissive));
+        v.model.materials.forEach((m) =>
+          m.emissive.copy(mode === 'flash' ? WHITE : mode === 'enraged' ? ENRAGED : m.userData.baseEmissive),
+        );
       }
       if (v.fuseMat && e.fuse > 0) v.fuseMat.emissive.setHex(Math.sin(t * 40) > 0 ? 0xffffff : 0xff2000);
     }

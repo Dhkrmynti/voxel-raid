@@ -37,7 +37,15 @@ async function newPlayer() {
 
 function attest(player, run, { sessionId = toHex(randomBytes(32)), deadline, key = signer } = {}) {
   const dl = deadline ?? BigInt(Math.floor(Date.now() / 1000) + 3600);
-  const message = { player, score: BigInt(run.score), wave: run.wave, kills: run.kills, tokens: run.tokens, sessionId, deadline: dl };
+  const message = {
+    player,
+    score: BigInt(run.score),
+    wave: run.wave,
+    kills: run.kills,
+    tokens: run.tokens,
+    sessionId,
+    deadline: dl,
+  };
   return key
     .signTypedData({
       domain: { name: 'VoxelRaid', version: '1', chainId: anvil.id, verifyingContract: contract },
@@ -68,13 +76,16 @@ before(async () => {
   client = createPublicClient({ chain: anvil, transport: http(node.url) });
   process.env.SERVER_SIGNER_KEY = signerKey;
   ({ leaderboard: contract } = await deploy({ chainName: 'anvil', rpcUrl: node.url, record: false, log: () => {} }));
-  app = createApp({
-    CHAIN: 'anvil',
-    RPC_URL: node.url,
-    SERVER_SIGNER_KEY: signerKey,
-    SESSION_SECRET: randomBytes(32).toString('hex'),
-    LEADERBOARD_ADDRESS: contract,
-  }, { now: () => clock, limits: false }); // rate limiting has its own tests
+  app = createApp(
+    {
+      CHAIN: 'anvil',
+      RPC_URL: node.url,
+      SERVER_SIGNER_KEY: signerKey,
+      SESSION_SECRET: randomBytes(32).toString('hex'),
+      LEADERBOARD_ADDRESS: contract,
+    },
+    { now: () => clock, limits: false },
+  ); // rate limiting has its own tests
 });
 
 after(() => node?.stop());
@@ -227,7 +238,10 @@ describe('api', () => {
   };
 
   const finish = (req, ticket, stats, replay, extra = {}) =>
-    req('/api/game/finish', { method: 'POST', body: JSON.stringify({ ticket, ...stats, simVersion: SIM_VERSION, replay, ...extra }) });
+    req('/api/game/finish', {
+      method: 'POST',
+      body: JSON.stringify({ ticket, ...stats, simVersion: SIM_VERSION, replay, ...extra }),
+    });
 
   test('honest run: replay verified → attestation → on-chain submission', async () => {
     const { req, p, start, sim, inputs } = await rankedRun();

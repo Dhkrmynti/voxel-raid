@@ -3,11 +3,11 @@
 Arena shooter 3D bergaya voxel/pixel di browser, dengan leaderboard mingguan on-chain, token VXL, dan skin senjata NFT
 di **Robinhood Chain** (L2 Arbitrum Orbit, gas dibayar dengan ETH).
 
-| Jaringan | Chain ID | Dipakai untuk |
-| --- | --- | --- |
-| Anvil (lokal) | 31337 | Development (`npm run dev:full`) |
-| Robinhood Chain Testnet | 46630 | Default target, testing publik |
-| Robinhood Chain | 4663 | Mainnet (aset sungguhan, deploy hanya setelah audit) |
+| Jaringan                | Chain ID | Dipakai untuk                                        |
+| ----------------------- | -------- | ---------------------------------------------------- |
+| Anvil (lokal)           | 31337    | Development (`npm run dev:full`)                     |
+| Robinhood Chain Testnet | 46630    | Default target, testing publik                       |
+| Robinhood Chain         | 4663     | Mainnet (aset sungguhan, deploy hanya setelah audit) |
 
 ## Jalankan
 
@@ -20,19 +20,19 @@ npm run dev:full       # Anvil + deploy contract + API + Vite → http://localho
 lalu men-deploy tiga contract (leaderboard, VXL, arsenal) dan mendaftarkan skin, kemudian menyalakan server API
 (port 8787) dan Vite. State Anvil hilang setiap kali di-restart, jadi contract akan di-deploy ulang dari nol.
 
-| Perintah | Fungsi |
-| --- | --- |
-| `npm run dev` | Frontend saja (tanpa server ranked) |
-| `npm test` | Test integrasi contract + API + validasi skor di Anvil sementara |
-| `npm run compile` | Compile contract ke `contracts/out/` |
-| `npm run deploy` | Deploy semua contract ke jaringan di `CHAIN` |
-| `npm run build` | Build frontend ke `dist/` |
+| Perintah          | Fungsi                                                           |
+| ----------------- | ---------------------------------------------------------------- |
+| `npm run dev`     | Frontend saja (tanpa server ranked)                              |
+| `npm test`        | Test integrasi contract + API + validasi skor di Anvil sementara |
+| `npm run compile` | Compile contract ke `contracts/out/`                             |
+| `npm run deploy`  | Deploy semua contract ke jaringan di `CHAIN`                     |
+| `npm run build`   | Build frontend ke `dist/`                                        |
 
 Untuk tes UI wallet tanpa ekstensi, buka `http://localhost:5173/?mockWallet` (hanya di mode dev). Di Anvil,
 mock wallet memakai akun default Anvil yang tidak terkunci, sehingga login, transaksi, dan permit benar-benar jalan.
 
 **MetaMask + Anvil:** setelah Anvil di-restart, MetaMask bisa menyimpan nonce lama dan muncul error "nonce too high".
-Perbaiki lewat Settings → Advanced → *Clear activity tab data*.
+Perbaiki lewat Settings → Advanced → _Clear activity tab data_.
 
 **Windows:** postinstall `@foundry-rs/anvil` memakai sintaks shell Unix dan gagal di `cmd`. Binary Anvil sudah ikut
 terpasang lewat optional dependency, jadi `npm install --ignore-scripts` aman dipakai.
@@ -72,12 +72,14 @@ pemain ── permit (tanda tangan) + buy ─────▶ VoxelArsenal    →
 - Biaya verifikasi: ~13 ms CPU per menit permainan.
 
 Pengamanan contract (detail lengkap dan runbook insiden ada di [SECURITY.md](SECURITY.md)):
+
 - Batas skor dan token per run, serta batas claim VXL harian global (circuit breaker).
 - `pause()` darurat oleh **guardian** (kunci yang hanya bisa menjeda), `unpause()` hanya oleh owner.
 - Kepemilikan dua langkah (Ownable2Step), disiapkan untuk Safe multisig.
 - Owner bisa merotasi signer dan menghapus entri leaderboard palsu.
 
 Kontrak:
+
 - **VoxelRaidLeaderboard**: hanya menerima skor yang ditandatangani signer server, untuk `msg.sender` itu sendiri
   (atestasi curian dari mempool tidak bisa dipakai), dengan deadline, dan setiap sessionId hanya bisa dipakai sekali.
 - **VoxelToken (VXL, ERC-20 + permit)**: jumlah yang bisa di-claim = koin di leaderboard − yang sudah di-claim.

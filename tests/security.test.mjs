@@ -76,7 +76,11 @@ before(async () => {
   addr = await deploy({ chainName: 'anvil', rpcUrl: node.url, record: false, log: () => {} });
   owner = { account: privateKeyToAccount(ANVIL_KEY_0), wallet: walletFor(privateKeyToAccount(ANVIL_KEY_0)) };
   guardian = await newPlayer();
-  for (const [address, abi] of [[addr.leaderboard, LB], [addr.token, TOKEN], [addr.arsenal, ARSENAL]]) {
+  for (const [address, abi] of [
+    [addr.leaderboard, LB],
+    [addr.token, TOKEN],
+    [addr.arsenal, ARSENAL],
+  ]) {
     await send(owner, address, abi, 'setGuardian', [guardian.account.address]);
   }
   await send(owner, addr.leaderboard, LB, 'setSigner', [signer.address]);
@@ -194,7 +198,11 @@ describe('incident drill: leaked signer key', () => {
     assert.equal(await read(addr.token, TOKEN, 'balanceOf', [attacker.account.address]), parseEther('8000'));
 
     // 2. Guardian pauses everything at once.
-    for (const [address, abi] of [[addr.leaderboard, LB], [addr.token, TOKEN]]) await send(guardian, address, abi, 'pause');
+    for (const [address, abi] of [
+      [addr.leaderboard, LB],
+      [addr.token, TOKEN],
+    ])
+      await send(guardian, address, abi, 'pause');
     await expectRevert(submit(attacker), 'EnforcedPause');
 
     // 3. Owner rotates the signer, removes the forged entry, and resumes.
@@ -203,7 +211,11 @@ describe('incident drill: leaked signer key', () => {
     await send(owner, addr.leaderboard, LB, 'setSigner', [signer.address]);
     const week = await read(addr.leaderboard, LB, 'currentWeek');
     await send(owner, addr.leaderboard, LB, 'removeEntry', [week, attacker.account.address]);
-    for (const [address, abi] of [[addr.leaderboard, LB], [addr.token, TOKEN]]) await send(owner, address, abi, 'unpause');
+    for (const [address, abi] of [
+      [addr.leaderboard, LB],
+      [addr.token, TOKEN],
+    ])
+      await send(owner, address, abi, 'unpause');
 
     // 4. The leaked key is now useless; honest players carry on.
     await expectRevert(submit(attacker, { key: leaked }), 'InvalidAttestation');

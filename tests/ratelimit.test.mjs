@@ -71,7 +71,10 @@ async function signIn(req) {
     chainId: anvil.id,
     nonce: body.nonce,
   });
-  return req('/api/auth/verify', { method: 'POST', body: JSON.stringify({ message, signature: await account.signMessage({ message }) }) });
+  return req('/api/auth/verify', {
+    method: 'POST',
+    body: JSON.stringify({ message, signature: await account.signMessage({ message }) }),
+  });
 }
 
 describe('API limits', () => {
@@ -85,7 +88,13 @@ describe('API limits', () => {
   });
 
   test('game tickets are limited per wallet, not shared between wallets', async () => {
-    const app = makeApp({ limits: { nonce: { limit: 100, windowMs: 60_000 }, verify: { limit: 100, windowMs: 60_000 }, start: { limit: 2, windowMs: 3_600_000 } } });
+    const app = makeApp({
+      limits: {
+        nonce: { limit: 100, windowMs: 60_000 },
+        verify: { limit: 100, windowMs: 60_000 },
+        start: { limit: 2, windowMs: 3_600_000 },
+      },
+    });
     const a = agent(app);
     const b = agent(app);
     await signIn(a);
@@ -98,7 +107,10 @@ describe('API limits', () => {
 
   test('oversized request bodies are refused before parsing', async () => {
     const req = agent(makeApp());
-    const res = await req('/api/auth/verify', { method: 'POST', body: JSON.stringify({ message: 'x'.repeat(64 * 1024), signature: '0x' }) });
+    const res = await req('/api/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ message: 'x'.repeat(64 * 1024), signature: '0x' }),
+    });
     assert.equal(res.status, 413);
   });
 
@@ -114,7 +126,16 @@ describe('API limits', () => {
     const t0 = performance.now();
     const res = await req('/api/game/finish', {
       method: 'POST',
-      body: JSON.stringify({ ticket: start.ticket, score: 0, wave: 1, kills: 0, tokens: 0, detonations: 0, simVersion: SIM_VERSION, replay: gzipSync(w.bytes()).toString('base64') }),
+      body: JSON.stringify({
+        ticket: start.ticket,
+        score: 0,
+        wave: 1,
+        kills: 0,
+        tokens: 0,
+        detonations: 0,
+        simVersion: SIM_VERSION,
+        replay: gzipSync(w.bytes()).toString('base64'),
+      }),
     });
     assert.equal(res.status, 422);
     assert.match(res.body.error, /waktu nyata/);

@@ -15,7 +15,11 @@ export const shortAddress = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 export const defaultName = (address) => `PILOT-${address.slice(2, 6).toUpperCase()}`;
 
 export function sanitizeName(name) {
-  return name.replace(/[^A-Za-z0-9_\- ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+  return name
+    .replace(/[^A-Za-z0-9_\- ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 16);
 }
 
 export function getPilotName(address) {

@@ -117,18 +117,29 @@ button {
   cursor: pointer;
   color: #120a24;
   background: var(--yellow);
-  box-shadow: inset -4px -4px 0 rgba(0, 0, 0, 0.28), inset 4px 4px 0 rgba(255, 255, 255, 0.3), 0 6px 0 #000;
-  transition: transform 0.08s, box-shadow 0.08s;
+  box-shadow:
+    inset -4px -4px 0 rgba(0, 0, 0, 0.28),
+    inset 4px 4px 0 rgba(255, 255, 255, 0.3),
+    0 6px 0 #000;
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s;
 }
 
 .btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: inset -4px -4px 0 rgba(0, 0, 0, 0.28), inset 4px 4px 0 rgba(255, 255, 255, 0.3), 0 8px 0 #000;
+  box-shadow:
+    inset -4px -4px 0 rgba(0, 0, 0, 0.28),
+    inset 4px 4px 0 rgba(255, 255, 255, 0.3),
+    0 8px 0 #000;
 }
 
 .btn:active:not(:disabled) {
   transform: translateY(4px);
-  box-shadow: inset -4px -4px 0 rgba(0, 0, 0, 0.28), inset 4px 4px 0 rgba(255, 255, 255, 0.3), 0 2px 0 #000;
+  box-shadow:
+    inset -4px -4px 0 rgba(0, 0, 0, 0.28),
+    inset 4px 4px 0 rgba(255, 255, 255, 0.3),
+    0 2px 0 #000;
 }
 
 .btn:focus-visible {
@@ -192,7 +203,9 @@ h1 {
   font-size: clamp(44px, 9vw, 104px);
   line-height: 1.05;
   margin: 24px 0;
-  text-shadow: 4px 4px 0 var(--pink), 8px 8px 0 #000;
+  text-shadow:
+    4px 4px 0 var(--pink),
+    8px 8px 0 #000;
 }
 
 h1 span {
@@ -285,7 +298,9 @@ h1 span {
 .phase {
   background: var(--panel);
   padding: 28px;
-  box-shadow: inset 0 0 0 3px var(--line), 6px 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--line),
+    6px 6px 0 #000;
 }
 
 .card .icon {
@@ -358,7 +373,9 @@ kbd {
   padding: 8px;
   color: var(--text);
   background: #2a1d4d;
-  box-shadow: inset -3px -3px 0 rgba(0, 0, 0, 0.35), inset 3px 3px 0 rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset -3px -3px 0 rgba(0, 0, 0, 0.35),
+    inset 3px 3px 0 rgba(255, 255, 255, 0.12);
 }
 
 .tip {
@@ -375,7 +392,9 @@ kbd {
 .table-wrap {
   overflow-x: auto;
   background: var(--panel);
-  box-shadow: inset 0 0 0 3px var(--line), 6px 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--line),
+    6px 6px 0 #000;
   padding: 8px 20px;
 }
 
@@ -434,7 +453,9 @@ kbd {
 }
 
 .phase.live {
-  box-shadow: inset 0 0 0 3px var(--green), 6px 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--green),
+    6px 6px 0 #000;
 }
 
 .num {
@@ -551,7 +572,9 @@ kbd {
   width: min(260px, 40vw);
   height: 18px;
   background: #000;
-  box-shadow: 0 0 0 3px #fff, 4px 4px 0 3px #000;
+  box-shadow:
+    0 0 0 3px #fff,
+    4px 4px 0 3px #000;
 }
 
 #hp-fill {
@@ -616,7 +639,9 @@ kbd {
   text-align: center;
   opacity: 0;
   transform: scale(0.85);
-  transition: opacity 0.25s, transform 0.25s;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
 }
 
 #banner.show {
@@ -627,7 +652,9 @@ kbd {
 #banner-title {
   font-size: clamp(22px, 5vw, 48px);
   color: var(--yellow);
-  text-shadow: 4px 4px 0 var(--pink), 8px 8px 0 #000;
+  text-shadow:
+    4px 4px 0 var(--pink),
+    8px 8px 0 #000;
 }
 
 #banner-sub {
@@ -664,7 +691,9 @@ kbd {
   padding: 40px 32px;
   text-align: center;
   background: var(--panel);
-  box-shadow: inset 0 0 0 4px var(--line), 8px 8px 0 #000;
+  box-shadow:
+    inset 0 0 0 4px var(--line),
+    8px 8px 0 #000;
 }
 
 .panel h2 {
@@ -761,7 +790,9 @@ kbd {
 .btn-wallet.connected {
   background: var(--panel);
   color: var(--text);
-  box-shadow: inset 0 0 0 3px var(--cyan), 0 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--cyan),
+    0 6px 0 #000;
 }
 
 .avatar {
@@ -804,7 +835,9 @@ dialog.modal {
   max-height: calc(100% - 32px);
   color: var(--text);
   background: var(--panel);
-  box-shadow: inset 0 0 0 4px var(--line), 8px 8px 0 #000;
+  box-shadow:
+    inset 0 0 0 4px var(--line),
+    8px 8px 0 #000;
 }
 
 dialog.modal::backdrop {
@@ -930,7 +963,9 @@ dialog.modal::backdrop {
   width: 72px;
   height: 72px;
   image-rendering: pixelated;
-  box-shadow: 0 0 0 3px var(--cyan), 5px 5px 0 3px #000;
+  box-shadow:
+    0 0 0 3px var(--cyan),
+    5px 5px 0 3px #000;
 }
 
 .pixel-name {
@@ -1034,7 +1069,9 @@ dialog.modal::backdrop {
 /* ---------- ranked / on-chain ---------- */
 
 .btn-wallet.ranked {
-  box-shadow: inset 0 0 0 3px var(--green), 0 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--green),
+    0 6px 0 #000;
 }
 
 .tabs {
@@ -1099,7 +1136,9 @@ dialog.modal::backdrop {
   flex-wrap: wrap;
   padding: 24px;
   background: var(--panel);
-  box-shadow: inset 0 0 0 3px var(--line), 6px 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--line),
+    6px 6px 0 #000;
 }
 
 .vault-stat b {
@@ -1135,11 +1174,15 @@ dialog.modal::backdrop {
   gap: 10px;
   padding: 16px;
   background: var(--panel);
-  box-shadow: inset 0 0 0 3px var(--line), 6px 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--line),
+    6px 6px 0 #000;
 }
 
 .skin-card.equipped {
-  box-shadow: inset 0 0 0 3px var(--green), 6px 6px 0 #000;
+  box-shadow:
+    inset 0 0 0 3px var(--green),
+    6px 6px 0 #000;
 }
 
 .skin-art {
@@ -1282,7 +1325,9 @@ dialog.modal::backdrop {
   font-size: clamp(14px, 2.4vw, 22px);
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.15s, transform 0.15s;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
 }
 
 #callout.show {

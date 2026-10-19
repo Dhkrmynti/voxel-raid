@@ -55,7 +55,15 @@ async function earn(player, tokens) {
     primaryType: 'Score',
     message: { player: player.account.address, ...run, sessionId, deadline },
   });
-  await send(player, addr.leaderboard, LB, 'submitScore', [run.score, run.wave, run.kills, run.tokens, sessionId, deadline, signature]);
+  await send(player, addr.leaderboard, LB, 'submitScore', [
+    run.score,
+    run.wave,
+    run.kills,
+    run.tokens,
+    sessionId,
+    deadline,
+    signature,
+  ]);
 }
 
 async function permit(player, value, { deadline = BigInt(Math.floor(Date.now() / 1000) + 3600) } = {}) {
@@ -84,7 +92,9 @@ before(async () => {
   process.env.SERVER_SIGNER_KEY = toHex(randomBytes(32));
   // Re-point the deployed leaderboard at our in-test signer.
   addr = await deploy({ chainName: 'anvil', rpcUrl: node.url, record: false, log: () => {} });
-  const owner = { wallet: createWalletClient({ account: privateKeyToAccount(ANVIL_KEY_0), chain: anvil, transport: http(node.url) }) };
+  const owner = {
+    wallet: createWalletClient({ account: privateKeyToAccount(ANVIL_KEY_0), chain: anvil, transport: http(node.url) }),
+  };
   await send(owner, addr.leaderboard, LB, 'setSigner', [signer.address]);
 });
 
@@ -109,7 +119,10 @@ describe('VXL token', () => {
 describe('arsenal', () => {
   test('lists the launch skins', async () => {
     const items = await read(addr.arsenal, ARSENAL, 'items');
-    assert.deepEqual(items.map((i) => i.name), SKINS.map((s) => s[0]));
+    assert.deepEqual(
+      items.map((i) => i.name),
+      SKINS.map((s) => s[0]),
+    );
     assert.equal(items[0].price, parseEther(String(SKINS[0][1])));
   });
 
@@ -166,7 +179,9 @@ describe('arsenal', () => {
   });
 
   test('inactive items cannot be bought and only the owner manages the catalog', async () => {
-    const owner = { wallet: createWalletClient({ account: privateKeyToAccount(ANVIL_KEY_0), chain: anvil, transport: http(node.url) }) };
+    const owner = {
+      wallet: createWalletClient({ account: privateKeyToAccount(ANVIL_KEY_0), chain: anvil, transport: http(node.url) }),
+    };
     const p = await newPlayer();
     await expectRevert(send(p, addr.arsenal, ARSENAL, 'addItem', ['HACK', 0n, 0, 0, 0]), 'OwnableUnauthorizedAccount');
     await expectRevert(send(owner, addr.arsenal, ARSENAL, 'addItem', ['bad"name', 0n, 0, 0, 0]), 'InvalidName');

@@ -188,7 +188,8 @@ function renderChainBoard() {
     hour: '2-digit',
     minute: '2-digit',
   });
-  $('#lb-meta').textContent = `Minggu #${chainBoard.week} · reset ${reset} · ${TARGET_CHAIN.name} · ${shortAddress(LEADERBOARD_ADDRESS)}`;
+  $('#lb-meta').textContent =
+    `Minggu #${chainBoard.week} · reset ${reset} · ${TARGET_CHAIN.name} · ${shortAddress(LEADERBOARD_ADDRESS)}`;
   const body = $('#lb-chain-body');
   if (!chainBoard.top.length) {
     messageRow(body, 4, 'Belum ada skor minggu ini. Jadilah yang pertama!');

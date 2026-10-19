@@ -26,7 +26,8 @@ const PERMIT_TYPES = {
   ],
 };
 
-const tokenCall = (functionName, args) => readContract(config, { address: TOKEN_ADDRESS, abi: tokenAbi, functionName, args, chainId });
+const tokenCall = (functionName, args) =>
+  readContract(config, { address: TOKEN_ADDRESS, abi: tokenAbi, functionName, args, chainId });
 const arsenalCall = (functionName, args) =>
   readContract(config, { address: ARSENAL_ADDRESS, abi: arsenalAbi, functionName, args, chainId });
 

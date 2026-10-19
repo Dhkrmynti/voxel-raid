@@ -17,7 +17,14 @@ const PLATFORMS = {
 export function anvilBinary() {
   const platform = PLATFORMS[`${process.platform}-${process.arch}`];
   if (!platform) throw new Error(`Anvil is not available for ${process.platform}-${process.arch}.`);
-  const bin = path.join(root, 'node_modules', '@foundry-rs', `anvil-${platform}`, 'bin', process.platform === 'win32' ? 'anvil.exe' : 'anvil');
+  const bin = path.join(
+    root,
+    'node_modules',
+    '@foundry-rs',
+    `anvil-${platform}`,
+    'bin',
+    process.platform === 'win32' ? 'anvil.exe' : 'anvil',
+  );
   if (!existsSync(bin)) throw new Error(`Anvil binary not found at ${bin}. Run npm install.`);
   return bin;
 }

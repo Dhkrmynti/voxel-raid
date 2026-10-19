@@ -70,7 +70,13 @@ export function initHero(canvas, heroSection) {
     const mesh = new THREE.Mesh(unitBox, cubeMats[i % 3]);
     mesh.scale.setScalar(0.15 + Math.random() * 0.25);
     world.add(mesh);
-    cubes.push({ mesh, r: 7 + Math.random() * 4, a: Math.random() * Math.PI * 2, y: -2 + Math.random() * 8, s: 0.1 + Math.random() * 0.25 });
+    cubes.push({
+      mesh,
+      r: 7 + Math.random() * 4,
+      a: Math.random() * Math.PI * 2,
+      y: -2 + Math.random() * 8,
+      s: 0.1 + Math.random() * 0.25,
+    });
   }
   scene.add(starField(600, 80));
 

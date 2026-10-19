@@ -22,7 +22,10 @@ export function botInput(sim, tick) {
   const coin = sim.pickups.find((k) => k.kind === 'token');
   if (coin) input.mz = 1;
   if (tick % 90 === 0) input.dash = true;
-  const best = sim.weapons.map((w, i) => (w.unlocked ? i : -1)).filter((i) => i >= 0).pop();
+  const best = sim.weapons
+    .map((w, i) => (w.unlocked ? i : -1))
+    .filter((i) => i >= 0)
+    .pop();
   if (best !== sim.weaponIndex && tick % 30 === 0) input.weapon = best;
   return input;
 }

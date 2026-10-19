@@ -60,7 +60,9 @@ export function starField(count, radius, color = 0xffffff) {
   const pos = new Float32Array(count * 3);
   const v = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
-    v.set(Math.random() * 2 - 1, Math.random() * 0.9 + 0.05, Math.random() * 2 - 1).normalize().multiplyScalar(radius);
+    v.set(Math.random() * 2 - 1, Math.random() * 0.9 + 0.05, Math.random() * 2 - 1)
+      .normalize()
+      .multiplyScalar(radius);
     pos.set([v.x, v.y, v.z], i * 3);
   }
   const geo = new THREE.BufferGeometry();
@@ -115,7 +117,12 @@ export function buildEnemyModel(type) {
     arms = [limb(0x4cb84c, [0.24, 0.7, 0.24], [-0.68, 1.35, 0.05]), limb(0x4cb84c, [0.24, 0.7, 0.24], [0.68, 1.35, 0.05])];
     colors = [0x5ed35a, 0x2f7a3a, 0x8cf07a];
   } else if (type === 'runner') {
-    for (const [x, z] of [[-0.3, 0.3], [0.3, 0.3], [-0.3, -0.3], [0.3, -0.3]]) {
+    for (const [x, z] of [
+      [-0.3, 0.3],
+      [0.3, 0.3],
+      [-0.3, -0.3],
+      [0.3, -0.3],
+    ]) {
       legs.push(limb(0x7a1f1f, [0.18, 0.35, 0.18], [x, 0.35, z]));
     }
     add(0xe8413c, [0.8, 0.5, 1.0], [0, 0.6, 0]);

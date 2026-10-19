@@ -133,7 +133,7 @@ export const sfx = {
   shieldHit() {
     tone({ f: 600, f2: 260, d: 0.18, type: 'triangle', v: 0.16 });
   },
-  unlock() {
+  weaponUnlock() {
     [392, 523, 659, 784, 1046].forEach((f, i) => tone({ f, d: 0.1, v: 0.1, delay: i * 0.07 }));
   },
   streak() {
