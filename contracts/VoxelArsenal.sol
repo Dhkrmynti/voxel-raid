@@ -39,6 +39,7 @@ contract VoxelArsenal is ERC721Enumerable, Guarded {
     error UnknownItem();
     error ItemInactive();
     error InvalidName();
+    error PriceAboveMax(uint256 price, uint256 maxPrice);
 
     constructor(ERC20Burnable token_, address owner_) ERC721("Voxel Raid Arsenal", "VXARS") Ownable(owner_) {
         token = token_;
@@ -79,22 +80,27 @@ contract VoxelArsenal is ERC721Enumerable, Guarded {
 
     // ---------- purchase ----------
 
-    /// @notice Buy with a prior `approve` of at least the item price.
-    function buy(uint256 itemId) external returns (uint256) {
-        return _purchase(itemId);
+    /// @notice Buy with a prior `approve`. `maxPrice` is the price the buyer saw: if the owner
+    /// raises it before the transaction lands, the purchase reverts instead of burning more.
+    function buy(uint256 itemId, uint256 maxPrice) external returns (uint256) {
+        return _purchase(itemId, maxPrice);
     }
 
-    /// @notice Buy with an EIP-2612 permit signature, so no separate approve transaction is needed.
-    function buyWithPermit(uint256 itemId, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external returns (uint256) {
+    /// @notice Buy with an EIP-2612 permit for `maxPrice`, so no separate approve transaction is needed.
+    function buyWithPermit(uint256 itemId, uint256 maxPrice, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        returns (uint256)
+    {
         // A front-runner may already have submitted this permit; the allowance is what matters.
-        try IERC20Permit(address(token)).permit(msg.sender, address(this), _item(itemId).price, deadline, v, r, s) {}
+        try IERC20Permit(address(token)).permit(msg.sender, address(this), maxPrice, deadline, v, r, s) {}
             catch {}
-        return _purchase(itemId);
+        return _purchase(itemId, maxPrice);
     }
 
-    function _purchase(uint256 itemId) private whenNotPaused returns (uint256 tokenId) {
+    function _purchase(uint256 itemId, uint256 maxPrice) private whenNotPaused returns (uint256 tokenId) {
         Item storage it = _item(itemId);
         if (!it.active) revert ItemInactive();
+        if (it.price > maxPrice) revert PriceAboveMax(it.price, maxPrice);
         token.burnFrom(msg.sender, it.price);
         tokenId = _nextTokenId++;
         itemOf[tokenId] = itemId;

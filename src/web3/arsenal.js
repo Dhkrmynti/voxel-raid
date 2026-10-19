@@ -118,7 +118,8 @@ export async function buySkin(item, onStep) {
       address: ARSENAL_ADDRESS,
       abi: arsenalAbi,
       functionName: 'buyWithPermit',
-      args: [BigInt(item.id), deadline, Number(v ?? BigInt(yParity + 27)), r, s],
+      // The permit and the price cap are both the price shown to the player.
+      args: [BigInt(item.id), item.price, deadline, Number(v ?? BigInt(yParity + 27)), r, s],
     },
     onStep,
   );

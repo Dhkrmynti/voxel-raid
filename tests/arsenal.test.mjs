@@ -134,7 +134,7 @@ describe('arsenal', () => {
 
     const price = parseEther('25');
     const { deadline, v, r, s } = await permit(p, price);
-    await send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [0n, deadline, v, r, s]);
+    await send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [0n, price, deadline, v, r, s]);
 
     assert.equal(await read(addr.token, TOKEN, 'balanceOf', [p.account.address]), parseEther('5'));
     assert.equal(await read(addr.token, TOKEN, 'totalSupply'), supplyBefore - price);
@@ -149,7 +149,7 @@ describe('arsenal', () => {
     // Someone else submits the permit first.
     const griefer = await newPlayer();
     await send(griefer, addr.token, TOKEN, 'permit', [p.account.address, addr.arsenal, parseEther('25'), deadline, v, r, s]);
-    await send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [0n, deadline, v, r, s]);
+    await send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [0n, parseEther('25'), deadline, v, r, s]);
     assert.equal((await read(addr.arsenal, ARSENAL, 'ownedItems', [p.account.address])).length, 1);
   });
 
@@ -158,7 +158,10 @@ describe('arsenal', () => {
     await earn(p, 10);
     await send(p, addr.token, TOKEN, 'claim');
     const { deadline, v, r, s } = await permit(p, parseEther('120'));
-    await expectRevert(send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [4n, deadline, v, r, s]), 'ERC20InsufficientBalance');
+    await expectRevert(
+      send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [4n, parseEther('120'), deadline, v, r, s]),
+      'ERC20InsufficientBalance',
+    );
   });
 
   test('tokenURI is valid on-chain JSON with an SVG image', async () => {
@@ -166,7 +169,7 @@ describe('arsenal', () => {
     await earn(p, 60);
     await send(p, addr.token, TOKEN, 'claim');
     const { deadline, v, r, s } = await permit(p, parseEther('60'));
-    await send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [2n, deadline, v, r, s]);
+    await send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [2n, parseEther('60'), deadline, v, r, s]);
     const tokenId = await read(addr.arsenal, ARSENAL, 'tokenOfOwnerByIndex', [p.account.address, 0n]);
 
     const uri = await read(addr.arsenal, ARSENAL, 'tokenURI', [tokenId]);
@@ -176,6 +179,21 @@ describe('arsenal', () => {
     const svg = Buffer.from(meta.image.split(',')[1], 'base64').toString('utf8');
     assert.match(svg, /^<svg .*<\/svg>$/);
     assert.match(svg, /#ffd23f/);
+  });
+
+  test('a price raised after the player signed reverts instead of burning more', async () => {
+    const owner = {
+      wallet: createWalletClient({ account: privateKeyToAccount(ANVIL_KEY_0), chain: anvil, transport: http(node.url) }),
+    };
+    const p = await newPlayer();
+    await earn(p, 100);
+    await send(p, addr.token, TOKEN, 'claim');
+    // An old, generous approval is still around when the owner raises the price.
+    await send(p, addr.token, TOKEN, 'approve', [addr.arsenal, parseEther('100')]);
+    await send(owner, addr.arsenal, ARSENAL, 'setItem', [3n, parseEther('90'), true]);
+    await expectRevert(send(p, addr.arsenal, ARSENAL, 'buy', [3n, parseEther('80')]), 'PriceAboveMax');
+    assert.equal(await read(addr.token, TOKEN, 'balanceOf', [p.account.address]), parseEther('100'));
+    await send(owner, addr.arsenal, ARSENAL, 'setItem', [3n, parseEther('80'), true]);
   });
 
   test('inactive items cannot be bought and only the owner manages the catalog', async () => {
@@ -190,7 +208,10 @@ describe('arsenal', () => {
     await earn(p, 40);
     await send(p, addr.token, TOKEN, 'claim');
     const { deadline, v, r, s } = await permit(p, parseEther('40'));
-    await expectRevert(send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [1n, deadline, v, r, s]), 'ItemInactive');
+    await expectRevert(
+      send(p, addr.arsenal, ARSENAL, 'buyWithPermit', [1n, parseEther('40'), deadline, v, r, s]),
+      'ItemInactive',
+    );
     await expectRevert(read(addr.arsenal, ARSENAL, 'svg', [99n]), 'UnknownItem');
   });
 });

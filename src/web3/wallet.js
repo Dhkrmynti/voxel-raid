@@ -94,10 +94,11 @@ export const wallet = {
 const REVERT_MESSAGES = {
   SessionAlreadyUsed: 'Skor run ini sudah pernah dikirim.',
   AttestationExpired: 'Bukti skor sudah kedaluwarsa (lebih dari 1 jam). Run ini tidak bisa dikirim lagi.',
-  InvalidAttestation: 'Bukti skor tidak valid untuk wallet ini.',
+  InvalidAttestation: 'Bukti skor tidak valid untuk wallet ini. Kirim dari wallet yang dipakai saat memulai run.',
   NothingToClaim: 'Belum ada token yang bisa di-claim.',
   ERC20InsufficientBalance: 'Saldo VXL tidak cukup.',
   ItemInactive: 'Skin ini sedang tidak dijual.',
+  PriceAboveMax: 'Harga skin baru saja berubah. Harga terbaru sudah ditampilkan; VXL kamu tidak terpakai.',
   EnforcedPause: 'Sedang dalam pemeliharaan (dijeda sementara). Coba lagi nanti.',
   DailyCapReached: 'Batas claim VXL global hari ini sudah tercapai. Coba lagi besok, token kamu tetap aman.',
   RunOverCap: 'Hasil run melebihi batas per run yang diizinkan.',

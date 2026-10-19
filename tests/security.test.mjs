@@ -165,9 +165,9 @@ describe('arsenal hardening', () => {
     await send(p, addr.token, TOKEN, 'claim');
     await send(p, addr.token, TOKEN, 'approve', [addr.arsenal, parseEther('25')]);
     await send(guardian, addr.arsenal, ARSENAL, 'pause');
-    await expectRevert(send(p, addr.arsenal, ARSENAL, 'buy', [0n]), 'EnforcedPause');
+    await expectRevert(send(p, addr.arsenal, ARSENAL, 'buy', [0n, parseEther('25')]), 'EnforcedPause');
     await send(owner, addr.arsenal, ARSENAL, 'unpause');
-    assert.equal((await send(p, addr.arsenal, ARSENAL, 'buy', [0n])).status, 'success');
+    assert.equal((await send(p, addr.arsenal, ARSENAL, 'buy', [0n, parseEther('25')])).status, 'success');
   });
 });
 

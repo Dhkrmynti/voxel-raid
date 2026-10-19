@@ -159,7 +159,11 @@ async function runTx(fn, successText) {
     await refresh();
     setStatus(typeof successText === 'function' ? successText() : successText);
   } catch (err) {
-    setStatus(walletErrorText(err), true);
+    const message = walletErrorText(err);
+    // A price or listing may have changed under us: show the catalog as it is on-chain now.
+    catalog = null;
+    await refresh();
+    setStatus(message, true);
   } finally {
     busy = false;
     render();
@@ -171,14 +175,20 @@ function buy(itemId) {
   runTx((onStep) => buySkin(item, onStep), `✓ ${item.name} jadi milikmu! Klik PAKAI untuk memakainya.`);
 }
 
+let refreshReq = 0; // a slow read for a previous wallet must not overwrite the current one
+
 export async function refresh() {
   if (!ARSENAL_ADDRESS) return render();
   const p = currentPlayer();
+  const req = ++refreshReq;
   try {
     catalog ??= await readCatalog();
-    player = p ? await readPlayer(p.address) : null;
+    const next = p ? await readPlayer(p.address) : null;
+    if (req !== refreshReq) return;
+    player = next;
     if (!p) setStatus('Connect wallet untuk claim VXL dan membeli skin.');
   } catch {
+    if (req !== refreshReq) return;
     setStatus(`Gagal membaca arsenal dari ${TARGET_CHAIN.name}.`, true);
   }
   render();
