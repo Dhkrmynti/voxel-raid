@@ -8,11 +8,14 @@ import solc from 'solc';
 const require = createRequire(import.meta.url);
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const CONTRACTS = ['VoxelRaidLeaderboard', 'VoxelToken', 'VoxelArsenal'];
+// Source text feeds the metadata hash in the bytecode, so CRLF checkouts (Windows) must compile
+// to exactly the same artifacts as LF ones.
+const lf = (text) => text.replaceAll('\r\n', '\n');
 
 const input = {
   language: 'Solidity',
   sources: Object.fromEntries(
-    CONTRACTS.map((name) => [`${name}.sol`, { content: readFileSync(path.join(dir, `${name}.sol`), 'utf8') }]),
+    CONTRACTS.map((name) => [`${name}.sol`, { content: lf(readFileSync(path.join(dir, `${name}.sol`), 'utf8')) }]),
   ),
   settings: {
     optimizer: { enabled: true, runs: 200 },
@@ -25,7 +28,7 @@ const input = {
 function findImports(importPath) {
   for (const resolve of [() => path.join(dir, importPath), () => require.resolve(importPath)]) {
     try {
-      return { contents: readFileSync(resolve(), 'utf8') };
+      return { contents: lf(readFileSync(resolve(), 'utf8')) };
     } catch {
       // try the next location
     }
