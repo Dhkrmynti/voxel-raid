@@ -213,14 +213,17 @@ async function submitLastRun() {
   btn.disabled = true;
   try {
     if (!lastRun.ticket) throw new Error('Run ini tidak punya tiket ranked (server offline saat game dimulai?).');
-    const { hash, dailyRank } = await submitRun(lastRun.ticket, lastRun.stats, lastRun.replay, (step) =>
+    const { hash, dailyRank, notice } = await submitRun(lastRun.ticket, lastRun.stats, lastRun.replay, (step) =>
       setStatus(STEP_TEXT[step]),
     );
     lastRun.submitted = true;
     btn.hidden = true;
-    setStatus(`✓ Skor tercatat on-chain!${dailyRank ? ` Peringkat daily #${dailyRank}.` : ''} `);
-    const url = txUrl(hash);
-    if (url) {
+    const rankText = dailyRank ? ` Peringkat daily #${dailyRank}.` : '';
+    setStatus(hash ? `✓ Skor tercatat on-chain!${rankText} ` : `✓ ${notice}${rankText}`);
+    const url = hash && txUrl(hash);
+    if (!hash) {
+      // nothing new on-chain
+    } else if (url) {
       const a = document.createElement('a');
       a.href = url;
       a.target = '_blank';

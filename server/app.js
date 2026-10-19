@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { Hono } from 'hono';
@@ -129,9 +129,10 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
   // ---------- abuse protection ----------
 
   const limiter = createRateLimiter({ now });
-  // X-Forwarded-For is client-controlled unless a trusted proxy overwrites it.
+  // X-Forwarded-For is client-controlled: proxies append the address they saw, so only the
+  // right-most entry (added by our own proxy) can be trusted.
   const clientIp = (c) =>
-    (env.TRUST_PROXY === '1' && c.req.header('x-forwarded-for')?.split(',')[0].trim()) ||
+    (env.TRUST_PROXY === '1' && c.req.header('x-forwarded-for')?.split(',').at(-1).trim()) ||
     c.env?.incoming?.socket?.remoteAddress ||
     'unknown';
 
@@ -248,8 +249,9 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
         return c.json({ error: 'Replay tidak ada atau terlalu besar.' }, 400);
       }
       let inputs;
+      let raw;
       try {
-        const raw = gunzipSync(Buffer.from(body.replay, 'base64'), { maxOutputLength: MAX_REPLAY_BYTES });
+        raw = gunzipSync(Buffer.from(body.replay, 'base64'), { maxOutputLength: MAX_REPLAY_BYTES });
         inputs = decodeReplay(raw, MAX_REPLAY_TICKS);
       } catch {
         return c.json({ error: 'Replay tidak valid.' }, 400);
@@ -269,6 +271,13 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
       const problem = validateRun(stats, elapsed);
       if (problem) return c.json({ error: problem }, 422);
 
+      // A ticket is good for one run. Resending the same replay (e.g. after a dropped
+      // connection) gets the same answer; a different replay on a spent ticket is refused.
+      const replayHash = createHash('sha256').update(raw).digest('hex');
+      if (store.useTicket(ticket.sessionId, replayHash, ticket.exp) === 'conflict') {
+        return c.json({ error: 'Tiket game ini sudah dipakai untuk run lain. Mulai game baru.' }, 409);
+      }
+
       // Verified: keep the replay if it's a personal best, and update the daily board.
       const { dailyRank } = store.recordRun({
         sessionId: ticket.sessionId,
@@ -277,12 +286,23 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
         arena: ticket.arena,
         mode: ticket.mode ?? 'ranked',
         day: ticket.day,
-        week: Math.floor(ticket.startedAt / 1000 / WEEK_SEC),
+        // Matches the week the contract will use: the score goes on-chain right after this.
+        week: Math.floor(now() / 1000 / WEEK_SEC),
         simVersion: SIM_VERSION,
         stats,
         replay: body.replay,
       });
       const run = { score: stats.score, wave: stats.wave, kills: stats.kills, tokens: stats.tokens };
+
+      // Everyone plays the same daily world, so one replay could be resubmitted on fresh daily
+      // tickets to farm VXL. Only the first verified daily run of the day goes on-chain.
+      if (ticket.mode === 'daily' && !store.claimDailyAttestation(ticket.day, address, ticket.sessionId)) {
+        return c.json({
+          attestation: null,
+          dailyRank,
+          notice: 'Run daily hari ini sudah tercatat on-chain. Run ini hanya masuk papan daily.',
+        });
+      }
 
       const verifyingContract = contractAddress();
       if (!verifyingContract) return c.json({ error: `Contract belum di-deploy di ${chain.name}.` }, 503);
@@ -316,6 +336,19 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
     });
   });
 
+  // Today's daily replays stay private to their owner until the day is over: everyone plays
+  // the same world, so a published replay could simply be resubmitted by someone else.
+  const replayFor = (c, r) => {
+    if (!r) return c.json({ error: 'Replay tidak ditemukan.' }, 404);
+    if (r.mode === 'daily' && r.day >= today()) {
+      const viewer = unseal(getCookie(c, SESSION_COOKIE), 'session')?.address;
+      if (viewer?.toLowerCase() !== r.address.toLowerCase()) {
+        return c.json({ error: 'Replay daily bisa ditonton setelah hari ini berakhir.' }, 403);
+      }
+    }
+    return c.json(replayView(r));
+  };
+
   const replayView = (r) =>
     r && {
       sessionId: r.sessionId,
@@ -333,13 +366,11 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
     const week = Number(c.req.query('week'));
     const player = c.req.query('player') ?? '';
     if (!Number.isSafeInteger(week) || !isAddress(player)) return c.json({ error: 'Permintaan tidak valid.' }, 400);
-    const r = store.weeklyBestReplay(week, player);
-    return r ? c.json(replayView(r)) : c.json({ error: 'Replay tidak ditemukan.' }, 404);
+    return replayFor(c, store.weeklyBestReplay(week, player));
   });
 
   app.get('/replays/:id', rateLimit('read', 'ip'), (c) => {
-    const r = store.getReplay(c.req.param('id'));
-    return r ? c.json(replayView(r)) : c.json({ error: 'Replay tidak ditemukan.' }, 404);
+    return replayFor(c, store.getReplay(c.req.param('id')));
   });
 
   app.get('/profiles', rateLimit('read', 'ip'), (c) => {

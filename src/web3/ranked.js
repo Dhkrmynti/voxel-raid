@@ -100,7 +100,11 @@ async function gzipBase64(bytes) {
 
 /**
  * Validates the run on the server, then submits the attested score from the player's wallet.
+ * Safe to call again after a failure: a score that already landed on-chain is not sent twice.
  * @param {(step: 'validating'|'switching'|'confirm'|'pending', hash?: string) => void} onStep
+ * @returns {Promise<{ hash: string | null, dailyRank: number | null, notice?: string }>}
+ *   hash is null when nothing new was sent (already on-chain, or a daily run that only counts
+ *   for the daily board; `notice` then says why)
  */
 export async function submitRun(ticket, run, replay, onStep) {
   if (!LEADERBOARD_ADDRESS) throw new Error(`Contract belum di-deploy di ${TARGET_CHAIN.name}.`);
@@ -108,12 +112,14 @@ export async function submitRun(ticket, run, replay, onStep) {
   const {
     attestation: a,
     signature,
-    dailyRank,
+    dailyRank = null,
+    notice,
   } = await api.finishGame(ticket, {
     ...run,
     simVersion: SIM_VERSION,
     replay: await gzipBase64(replay),
   });
+  if (!a) return { hash: null, dailyRank, notice };
   if (a.contract.toLowerCase() !== LEADERBOARD_ADDRESS.toLowerCase()) {
     throw new Error('Alamat contract di server berbeda dengan aplikasi. Muat ulang halaman.');
   }
@@ -121,6 +127,15 @@ export async function submitRun(ticket, run, replay, onStep) {
     onStep('switching');
     await wallet.switchToTarget();
   }
+  // A retry after a dropped receipt wait: the first transaction may have landed after all.
+  const used = await readContract(config, {
+    address: LEADERBOARD_ADDRESS,
+    abi,
+    functionName: 'usedSessions',
+    args: [a.sessionId],
+    chainId: TARGET_CHAIN.id,
+  });
+  if (used) return { hash: null, dailyRank, notice: 'Skor run ini sudah tercatat on-chain.' };
   onStep('confirm');
   const { request } = await simulateContract(config, {
     address: LEADERBOARD_ADDRESS,
@@ -134,7 +149,7 @@ export async function submitRun(ticket, run, replay, onStep) {
   onStep('pending', hash);
   const receipt = await waitForTransactionReceipt(config, { hash, chainId: TARGET_CHAIN.id });
   if (receipt.status !== 'success') throw new Error('Transaksi gagal di chain.');
-  return { hash, dailyRank: dailyRank ?? null };
+  return { hash, dailyRank };
 }
 
 export function txUrl(hash) {

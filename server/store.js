@@ -4,14 +4,18 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-const RETENTION_MS = 21 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+const RETENTION_MS = 21 * DAY_MS;
 const FLUSH_DELAY_MS = 500;
 
 /**
  * @param {{ file?: string, now?: () => number }} [options] omit `file` for a memory-only store (tests)
  */
 export function createStore({ file, now = Date.now } = {}) {
-  let data = { replays: {}, weeklyBest: {}, daily: {}, names: {} };
+  // tickets: sessionId → { hash, exp } of the replay a game ticket was spent on.
+  // dailyAttested: "day:address" → the one daily session that day that may go on-chain.
+  let data = { replays: {}, weeklyBest: {}, daily: {}, names: {}, tickets: {}, dailyAttested: {} };
   if (file) {
     try {
       data = { ...data, ...JSON.parse(readFileSync(file, 'utf8')) };
@@ -39,8 +43,13 @@ export function createStore({ file, now = Date.now } = {}) {
     const keep = new Set(Object.values(data.weeklyBest));
     for (const board of Object.values(data.daily)) for (const e of Object.values(board)) keep.add(e.sessionId);
     for (const [id, r] of Object.entries(data.replays)) if (!keep.has(id) || r.createdAt < cutoff) delete data.replays[id];
-    const cutoffDay = Math.floor(cutoff / 86_400_000);
+    const cutoffDay = Math.floor(cutoff / DAY_MS);
     for (const day of Object.keys(data.daily)) if (Number(day) < cutoffDay) delete data.daily[day];
+    for (const key of Object.keys(data.dailyAttested)) if (Number(key.split(':')[0]) < cutoffDay) delete data.dailyAttested[key];
+    const cutoffWeek = Math.floor(cutoff / WEEK_MS);
+    for (const key of Object.keys(data.weeklyBest)) if (Number(key.split(':')[0]) < cutoffWeek) delete data.weeklyBest[key];
+    const t = now();
+    for (const [id, ticket] of Object.entries(data.tickets)) if (ticket.exp < t) delete data.tickets[id];
   }
   prune();
 
@@ -75,12 +84,34 @@ export function createStore({ file, now = Date.now } = {}) {
       return { dailyRank };
     },
 
+    /**
+     * Spends a game ticket on one replay. Sending the same replay again (a retry) is fine;
+     * a different replay on a spent ticket is not.
+     * @returns {'new' | 'repeat' | 'conflict'}
+     */
+    useTicket(sessionId, hash, exp) {
+      const prev = data.tickets[sessionId];
+      if (prev) return prev.hash === hash ? 'repeat' : 'conflict';
+      data.tickets[sessionId] = { hash, exp };
+      save();
+      return 'new';
+    },
+
+    /** Daily runs share one seed, so only one per wallet per day may earn an on-chain attestation. */
+    claimDailyAttestation(day, address, sessionId) {
+      const key = `${day}:${address.toLowerCase()}`;
+      data.dailyAttested[key] ??= sessionId;
+      save();
+      return data.dailyAttested[key] === sessionId;
+    },
+
     getReplay(sessionId) {
-      return data.replays[sessionId] ?? null;
+      return Object.hasOwn(data.replays, sessionId) ? data.replays[sessionId] : null;
     },
 
     weeklyBestReplay(week, address) {
-      return data.replays[data.weeklyBest[`${week}:${address.toLowerCase()}`]] ?? null;
+      const id = data.weeklyBest[`${week}:${address.toLowerCase()}`];
+      return id ? this.getReplay(id) : null;
     },
 
     /** Best run per player for a day, highest first; ties go to whoever got there first. */

@@ -13,7 +13,7 @@ import { createSiweMessage } from 'viem/siwe';
 import { createApp } from '../server/app.js';
 import { createStore } from '../server/store.js';
 import { decodeReplay, ReplayWriter } from '../src/game/replay.js';
-import { Sim, SIM_VERSION, TICK } from '../src/game/sim.js';
+import { idleInput, Sim, SIM_VERSION, TICK } from '../src/game/sim.js';
 import { replayRun } from '../src/game/verify.js';
 import { playToDeath } from './bot.mjs';
 
@@ -164,6 +164,77 @@ describe('stored replays', () => {
     assert.ok(worse.sim.stats().score < good.sim.stats().score);
     assert.equal((await agent(app)(`/api/replays/${worse.res.body.attestation.sessionId}`)).status, 404);
     assert.equal((await agent(app)(`/api/replays/${good.res.body.attestation.sessionId}`)).status, 200);
+  });
+});
+
+describe('abuse protection', () => {
+  /** A complete replay that just stands still until the enemies win. */
+  const idleRun = (seed, arena) => {
+    const sim = new Sim(seed, { arena });
+    const inputs = [];
+    while (!sim.over) {
+      const i = idleInput(0, 0);
+      inputs.push(i);
+      sim.step(i);
+    }
+    return { sim, inputs };
+  };
+
+  test('a game ticket is spent on one replay; resending the same one is a safe retry', async () => {
+    const { app, clock } = setup();
+    const p = await player(app);
+    const { res, start, sim, inputs } = await playAndSubmit(p, clock);
+    assert.equal(res.status, 200);
+    const finish = (stats, replay) =>
+      p.req('/api/game/finish', {
+        method: 'POST',
+        body: JSON.stringify({ ticket: start.ticket, ...stats, simVersion: SIM_VERSION, replay }),
+      });
+    const retry = await finish(sim.stats(), encode(inputs));
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.attestation.sessionId, res.body.attestation.sessionId);
+
+    const other = idleRun(start.seed, start.arena);
+    const reuse = await finish(other.sim.stats(), encode(other.inputs));
+    assert.equal(reuse.status, 409);
+    assert.match(reuse.body.error, /sudah dipakai/);
+  });
+
+  test('daily: one on-chain run per wallet per day, and replays stay private until the day ends', async () => {
+    const { app, clock } = setup();
+    const p1 = await player(app);
+    const p2 = await player(app);
+    const first = await playAndSubmit(p1, clock, { mode: 'daily' });
+    assert.ok(first.res.body.attestation, 'the first daily run goes on-chain');
+
+    // Resubmitting the same daily replay on a fresh ticket is the VXL-farming attempt.
+    const { body: again } = await p1.req('/api/game/start', { method: 'POST', body: JSON.stringify({ mode: 'daily' }) });
+    clock.t += first.sim.tick * TICK * 1000;
+    const farm = await p1.req('/api/game/finish', {
+      method: 'POST',
+      body: JSON.stringify({ ticket: again.ticket, ...first.sim.stats(), simVersion: SIM_VERSION, replay: encode(first.inputs) }),
+    });
+    assert.equal(farm.status, 200);
+    assert.equal(farm.body.attestation, null);
+    assert.match(farm.body.notice, /hanya masuk papan daily/);
+    assert.equal(farm.body.dailyRank, 1);
+
+    // Nobody else can grab today's replay to copy it, by id or via the weekly-best lookup.
+    const id = first.res.body.attestation.sessionId;
+    const week = Math.floor(clock.t / 1000 / 604800);
+    assert.equal((await p2.req(`/api/replays/${id}`)).status, 403);
+    assert.equal((await agent(app)(`/api/replays/best?week=${week}&player=${p1.address}`)).status, 403);
+    assert.equal((await p1.req(`/api/replays/${id}`)).status, 200, 'the owner can rewatch it');
+
+    clock.t += DAY;
+    assert.equal((await p2.req(`/api/replays/${id}`)).status, 200, 'public once the day is over');
+  });
+
+  test('prototype keys are not replay ids', async () => {
+    const { app } = setup();
+    for (const id of ['__proto__', 'constructor', 'toString']) {
+      assert.equal((await agent(app)(`/api/replays/${id}`)).status, 404, id);
+    }
   });
 });
 

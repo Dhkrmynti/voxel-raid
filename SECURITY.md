@@ -56,14 +56,35 @@ Langkah 1–5 diuji otomatis di `tests/security.test.mjs` (_incident drill: leak
 
   Kalau serangan tetap terjadi, turunkan angka di `DEFAULT_LIMITS` lalu deploy ulang server.
 
+## Aturan anti-farming
+
+- **Satu tiket = satu run.** Tiket game hanya bisa dipakai untuk satu replay. Mengirim replay yang sama lagi
+  (misalnya setelah koneksi putus) aman dan dijawab sama; replay lain di tiket yang sama ditolak (409).
+- **Daily: satu run on-chain per wallet per hari.** Semua pemain dapat seed daily yang sama, jadi satu replay
+  bagus bisa saja dikirim ulang di tiket daily baru untuk memanen VXL. Hanya run daily pertama yang terverifikasi
+  hari itu yang dapat atestasi; run berikutnya hanya masuk papan daily.
+- **Replay daily hari ini privat.** Sampai hari berganti, replay daily hanya bisa ditonton pemiliknya (lewat id
+  maupun lookup "terbaik minggu ini"), supaya tidak bisa disalin wallet lain.
+- **Harga skin dikunci saat ditandatangani.** `buy`/`buyWithPermit` menerima `maxPrice`; kalau owner menaikkan harga
+  sebelum transaksi masuk, pembelian revert (`PriceAboveMax`), bukan membakar VXL lebih banyak.
+
+### Risiko yang diterima
+
+Verifikasi replay membuktikan bahwa input menghasilkan skor itu, **bukan** bahwa manusia yang memainkannya.
+Simulasi berjalan di klien dan seed diketahui sejak tiket dibuat, jadi bot atau run berbantuan tool (aimbot,
+input yang dicari offline selama umur tiket 2 jam) tetap mungkin dan sulit dibedakan dari pemain yang sangat
+jago. Mitigasinya: hadiah mingguan dibatasi (top 10), batas klaim harian global di `VoxelToken`, dan owner bisa
+menghapus entri (`removeEntry`) setelah ditinjau. Pertimbangkan deteksi pola input (reaksi tidak manusiawi,
+akurasi sempurna) sebelum hadiah bernilai besar.
+
 ## Sebelum mainnet
 
 - Audit independen untuk ketiga contract dan server verifikasi.
 - Owner dipindah ke Safe multisig, guardian dipasang, dan seluruh runbook dilatih di testnet.
 - Rate limiter memakai store bersama (misalnya Redis) kalau server berjalan di lebih dari satu instance. Bawaannya
   in-memory per proses.
-- Set `TRUST_PROXY=1` **hanya** di belakang proxy yang menimpa `X-Forwarded-For`. Tanpa itu, header tersebut bisa
-  dipalsukan klien untuk menghindari limit per IP.
+- Set `TRUST_PROXY=1` **hanya** di belakang tepat satu proxy yang menambahkan alamat klien ke `X-Forwarded-For`.
+  Server memakai entri **paling kanan** (yang ditambahkan proxy kita); entri di kirinya bisa dipalsukan klien.
 - Simpan `SERVER_SIGNER_KEY` di KMS/HSM, bukan di file env.
 
 ## Melaporkan celah

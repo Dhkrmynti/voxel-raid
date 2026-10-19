@@ -10,6 +10,7 @@ const ARENA_NAMES = { citadel: 'CITADEL', foundry: 'FOUNDRY' };
 
 let daily = null;
 let offline = false;
+let nextRefresh = 0; // throttles reloads while the server's day hasn't rolled over yet
 
 /** Today's challenge ({ day, seed, arena, resetsAt, top }) or null when the server is unreachable. */
 export function currentDaily() {
@@ -36,7 +37,11 @@ function countdown() {
   }
   const left = Math.max(0, daily.resetsAt - Date.now());
   if (left === 0) {
-    loadDaily();
+    // The local clock may run ahead of the server's; ask again every 15 s, not every tick.
+    if (Date.now() >= nextRefresh) {
+      nextRefresh = Date.now() + 15_000;
+      loadDaily();
+    }
     return;
   }
   const h = Math.floor(left / 3_600_000);
@@ -84,12 +89,16 @@ export function render() {
       const wave = document.createElement('td');
       wave.textContent = e.wave;
       const watch = document.createElement('td');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn-ghost btn-sm';
-      btn.textContent = 'TONTON';
-      btn.dataset.session = e.sessionId;
-      watch.append(btn);
+      // Today's replays open up when the day ends (everyone plays the same world); until then
+      // each pilot can only rewatch their own.
+      if (e.address.toLowerCase() === me) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-ghost btn-sm';
+        btn.textContent = 'TONTON';
+        btn.dataset.session = e.sessionId;
+        watch.append(btn);
+      }
       tr.append(rank, pilot, score, wave, watch);
       return tr;
     }),

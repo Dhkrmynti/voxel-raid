@@ -28,10 +28,23 @@ describe('token bucket', () => {
     assert.ok(rl.take('a', rule).ok);
     assert.equal(rl.take('a', rule).ok, false);
   });
+
+  test('a full table only drops buckets that refilled by their own window', () => {
+    let t = 0;
+    const rl = createRateLimiter({ now: () => t });
+    const hourly = { limit: 1, windowMs: 60 * 60 * 1000 };
+    const minutely = { limit: 5, windowMs: 60 * 1000 };
+    assert.ok(rl.take('finish:a', hourly).ok);
+    for (let i = 1; i < 50_000; i++) rl.take(`read:${i}`, minutely);
+    t += 2 * 60 * 1000; // the per-minute buckets have refilled; the hourly one has not
+    rl.take('read:new', minutely); // table is full: sweeps
+    assert.ok(rl.size() < 100);
+    assert.equal(rl.take('finish:a', hourly).ok, false, 'an hourly limit must survive a sweep');
+  });
 });
 
 // The API without a chain: SIWE signatures from plain accounts verify offline.
-function makeApp(options) {
+function makeApp(options, extraEnv = {}) {
   return createApp(
     {
       CHAIN: 'anvil',
@@ -39,6 +52,7 @@ function makeApp(options) {
       SERVER_SIGNER_KEY: generatePrivateKey(),
       SESSION_SECRET: randomBytes(32).toString('hex'),
       LEADERBOARD_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+      ...extraEnv,
     },
     options,
   );
@@ -85,6 +99,16 @@ describe('API limits', () => {
     assert.equal(res.status, 429);
     assert.ok(Number(res.retryAfter) >= 1);
     assert.match(res.body.error, /Terlalu banyak permintaan/);
+  });
+
+  test('behind a proxy, a forged X-Forwarded-For prefix does not dodge the IP limit', async () => {
+    const req = agent(makeApp(undefined, { TRUST_PROXY: '1' }));
+    // The proxy appends the real client address; anything before it came from the client.
+    const from = (spoof) => ({ headers: { 'x-forwarded-for': `${spoof}, 203.0.113.7` } });
+    for (let i = 0; i < 20; i++) assert.equal((await req('/api/auth/nonce', from(`10.0.0.${i}`))).status, 200);
+    assert.equal((await req('/api/auth/nonce', from('10.9.9.9'))).status, 429);
+    const other = await req('/api/auth/nonce', { headers: { 'x-forwarded-for': '198.51.100.1' } });
+    assert.equal(other.status, 200, 'a different real client has its own budget');
   });
 
   test('game tickets are limited per wallet, not shared between wallets', async () => {
