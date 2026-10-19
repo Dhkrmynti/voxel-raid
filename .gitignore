@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Secrets — never commit. Copy .env.example instead.
+.env
+.env.*
+!.env.example
