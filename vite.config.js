@@ -1,6 +1,14 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
-export default defineConfig({
+// Social previews need absolute URLs: SITE_URL (e.g. https://voxelraid.xyz) fills %SITE_URL% in index.html.
+const siteUrl = (mode) => ({
+  name: 'site-url',
+  transformIndexHtml: (html) =>
+    html.replaceAll('%SITE_URL%', (loadEnv(mode, process.cwd(), '').SITE_URL ?? '').replace(/\/$/, '')),
+});
+
+export default defineConfig(({ mode }) => ({
+  plugins: [siteUrl(mode)],
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:8787',
@@ -18,4 +26,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

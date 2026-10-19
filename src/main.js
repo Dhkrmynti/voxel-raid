@@ -26,6 +26,10 @@ import('./hero.js').then(({ initHero }) => {
   hero = initHero(heroCanvas, $('.hero'));
   hero.setActive(!landing.hidden);
 });
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  // Offline play and instant reloads; failures only cost the offline cache.
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
 let gameModule = null;
 const loadGame = () => (gameModule ??= import('./game/Game.js'));
 // Warm the game chunk up while the player reads the landing page.

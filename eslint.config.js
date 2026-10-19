@@ -12,6 +12,7 @@ export default [
       eqeqeq: ['error', 'always'],
     },
   },
+  { files: ['public/sw.js'], languageOptions: { sourceType: 'script', globals: { ...globals.serviceworker } } },
   {
     files: ['server/**', 'scripts/**', 'tests/**', 'contracts/*.mjs', '*.config.js'],
     languageOptions: { globals: { ...globals.node } },

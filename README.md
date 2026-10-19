@@ -37,6 +37,18 @@ Perbaiki lewat Settings → Advanced → _Clear activity tab data_.
 **Windows:** postinstall `@foundry-rs/anvil` memakai sintaks shell Unix dan gagal di `cmd`. Binary Anvil sudah ikut
 terpasang lewat optional dependency, jadi `npm install --ignore-scripts` aman dipakai.
 
+## Fitur
+
+- **Dua arena**: CITADEL dan FOUNDRY, masing-masing dengan layout cover dan tema warna sendiri.
+- **Musuh**: grunt, runner, shooter, exploder, shielder (perisai di depan, incar dari samping), dan boss tiap 5 wave.
+- **Daily challenge**: seed dan arena yang sama untuk semua pemain hari itu, dengan papan peringkat harian.
+- **Replay**: tonton ulang run terbaik mingguan dari leaderboard (TONTON), dengan kontrol pause dan kecepatan.
+- **Hadiah mingguan**: top 10 leaderboard bisa klaim bonus VXL setelah minggu selesai.
+- **Nama pilot**: disimpan di server dan tampil di leaderboard.
+- **Setelan**: FOV, sensitivitas mouse/sentuh, invert Y, volume musik/SFX, dan kualitas grafis.
+- **Onboarding**: tutorial interaktif di game pertama dan panduan ranked yang mencentang langkah otomatis.
+- **PWA**: bisa di-install ke layar utama dan dimainkan offline sebagai guest.
+
 ## Cara kerja
 
 ```
@@ -103,6 +115,7 @@ Kontrak:
    SESSION_SECRET=<string acak ≥ 32 karakter>
    RPC_URL=<endpoint RPC server>
    VITE_RPC_URL=<endpoint RPC browser; batasi domain-nya di dashboard provider>
+   SITE_URL=https://<domain-game-kamu>
    ```
 2. Isi wallet deployer dengan ETH testnet dari faucet Robinhood Chain Testnet (misalnya faucet Alchemy).
 3. Jalankan `DEPLOYER_KEY=<kunci-kamu> node --env-file=.env.production.local scripts/deploy.mjs`.
@@ -125,12 +138,14 @@ drop. RENDAH mematikan glow, menurunkan resolusi render, dan mengurangi partikel
 
 - `index.html`: landing page, HUD game, dan dialog wallet
 - `src/main.js`: alur menu, game over, dan leaderboard lokal/on-chain
-- `src/game/`: game loop (`Game.js`), aturan + validasi run (`rules.js`), model voxel, dan SFX
+- `src/game/`: simulasi deterministik (`sim.js`), tampilan (`Game.js`), arena (`world.js`), efek visual
+  (`effects.js`), aturan + validasi run (`rules.js`), replay (`replay.js`, `verify.js`), model voxel, audio, tutorial
 - `src/web3/`: config wagmi (`wallet.js`), ranked (`ranked.js`), token & arsenal (`arsenal.js`), chain, API client
-- `src/ui/`: modal wallet/profil (`walletUI.js`) dan arsenal (`arsenalUI.js`)
+- `src/ui/`: wallet/profil, arsenal, daily, hadiah mingguan, dan panduan ranked
 - `contracts/`: contract Solidity, script compile, dan hasil ABI/bytecode
 - `server/`: API ranked (Hono)
-- `scripts/`: dev runner, deploy, Anvil, dan setup env
+- `public/`: manifest PWA, service worker, ikon, dan gambar preview sosial (`npm run icons` untuk generate ulang)
+- `scripts/`: dev runner, deploy, Anvil, setup env, dan generator ikon
 - `tests/`: test integrasi
 
 ## Roadmap
