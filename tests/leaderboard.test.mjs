@@ -220,13 +220,13 @@ describe('api', () => {
   });
 
   /** Signs in, gets a ticket, and plays a bot run to death on the ticket's seed. */
-  async function rankedRun({ seedOffset = 0 } = {}) {
+  async function rankedRun({ seedOffset = 0, arena } = {}) {
     const req = agent();
     const p = await newPlayer();
     await signIn(req, p.account);
-    const { body: start } = await req('/api/game/start', { method: 'POST' });
+    const { body: start } = await req('/api/game/start', { method: 'POST', body: JSON.stringify({ arena }) });
     assert.equal(start.simVersion, SIM_VERSION);
-    const { sim, inputs } = playToDeath(Sim, (start.seed + seedOffset) >>> 0);
+    const { sim, inputs } = playToDeath(Sim, (start.seed + seedOffset) >>> 0, undefined, { arena: start.arena });
     assert.ok(sim.over, 'bot run should end in death');
     return { req, p, start, sim, inputs };
   }
@@ -257,6 +257,16 @@ describe('api', () => {
     // Front-running: someone copying the attestation from the mempool cannot use it.
     await expectRevert(submit(await newPlayer(), args), 'InvalidAttestation');
     assert.equal((await submit(p, args)).status, 'success');
+  });
+
+  test('the arena is sealed into the ticket and used to verify the replay', async () => {
+    const { req, start, sim, inputs } = await rankedRun({ arena: 'foundry' });
+    assert.equal(start.arena, 'foundry');
+    clock += sim.tick * TICK * 1000;
+    assert.equal((await finish(req, start.ticket, sim.stats(), encode(inputs))).status, 200);
+
+    const bad = await req('/api/game/start', { method: 'POST', body: JSON.stringify({ arena: 'moon' }) });
+    assert.equal(bad.status, 400);
   });
 
   test('rejects an inflated score even with a valid replay', async () => {

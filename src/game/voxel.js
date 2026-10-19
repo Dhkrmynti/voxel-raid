@@ -151,6 +151,16 @@ export function buildEnemyModel(type) {
     // The fuse tip is its own material so the view can make it blink.
     add(0xffd23f, [0.14, 0.14, 0.14], [0, 1.32, 0], 0xff7b29);
     colors = [0xff7b29, 0x2a1a2e, 0xffd23f];
+  } else if (type === 'shielder') {
+    legs = [limb(0x2a3550, [0.36, 0.6, 0.36], [-0.3, 0.6, 0]), limb(0x2a3550, [0.36, 0.6, 0.36], [0.3, 0.6, 0])];
+    add(0x3a4a6e, [1.2, 1.1, 0.9], [0, 1.15, 0]);
+    add(0x2a3550, [0.7, 0.45, 0.7], [0, 1.92, 0]);
+    add(0xff3030, [0.5, 0.12, 0.06], [0, 1.95, 0.36], 0xff2020); // visor: the weak spot above the shield
+    add(0x5a6f9e, [1.5, 1.65, 0.14], [0, 0.92, 0.6]); // shield panel
+    add(0x3fa9ff, [1.54, 0.08, 0.16], [0, 1.76, 0.6], 0x3fa9ff);
+    add(0x3fa9ff, [0.3, 0.3, 0.16], [0, 1.0, 0.62], 0x3fa9ff);
+    arms = [limb(0x3a4a6e, [0.26, 0.7, 0.26], [0.75, 1.55, 0.1])];
+    colors = [0x3a4a6e, 0x3fa9ff, 0x5a6f9e];
   } else if (type === 'boss') {
     legs = [limb(0x6b2d0f, [0.4, 0.5, 0.4], [-0.32, 0.5, 0]), limb(0x6b2d0f, [0.4, 0.5, 0.4], [0.32, 0.5, 0])];
     add(0xff7b29, [1.3, 1.1, 1.0], [0, 1.05, 0]);

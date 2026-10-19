@@ -25,6 +25,6 @@ export const api = {
   verify: (message, signature) => call('/auth/verify', { method: 'POST', body: { message, signature } }),
   me: () => call('/auth/me'),
   logout: () => call('/auth/logout', { method: 'POST' }),
-  startGame: () => call('/game/start', { method: 'POST' }),
+  startGame: (arena) => call('/game/start', { method: 'POST', body: { arena } }),
   finishGame: (ticket, run) => call('/game/finish', { method: 'POST', body: { ticket, ...run } }),
 };

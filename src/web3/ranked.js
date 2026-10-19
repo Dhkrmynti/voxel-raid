@@ -79,10 +79,10 @@ wallet.subscribe((s) => {
  * Asks the server for a game ticket and the seed the run must use.
  * Resolves to null (an unranked run) when not signed in, offline, or too slow.
  */
-export async function startRankedRun(timeoutMs = 4000) {
+export async function startRankedRun(arena, timeoutMs = 4000) {
   if (!rankedState().active) return null;
   try {
-    const res = await Promise.race([api.startGame(), new Promise((_, reject) => setTimeout(reject, timeoutMs))]);
+    const res = await Promise.race([api.startGame(arena), new Promise((_, reject) => setTimeout(reject, timeoutMs))]);
     if (res.simVersion !== SIM_VERSION) return null; // stale page: play unranked rather than fail later
     return { ticket: res.ticket, seed: res.seed };
   } catch {

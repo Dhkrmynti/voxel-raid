@@ -9,7 +9,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { generateSiweNonce, parseSiweMessage } from 'viem/siwe';
 import { decodeReplay } from '../src/game/replay.js';
 import { validateRun } from '../src/game/rules.js';
-import { SIM_VERSION, TICK } from '../src/game/sim.js';
+import { ARENAS, DEFAULT_ARENA, SIM_VERSION, TICK } from '../src/game/sim.js';
 import { replayRun } from '../src/game/verify.js';
 import { createRateLimiter } from './ratelimit.js';
 import { deploymentFor, resolveChain } from '../src/web3/chains.js';
@@ -191,13 +191,16 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
   });
 
   // The server picks the seed, so a player can't shop for a lucky world.
-  app.post('/game/start', requireSession, rateLimit('start', 'wallet'), (c) => {
+  app.post('/game/start', maxBody(SMALL_BODY), requireSession, rateLimit('start', 'wallet'), async (c) => {
     const { address } = c.get('session');
+    const body = (await readJson(c)) ?? {};
+    const arena = body.arena ?? DEFAULT_ARENA;
+    if (!Object.hasOwn(ARENAS, arena)) return c.json({ error: 'Arena tidak dikenal.' }, 400);
     const startedAt = now();
     const sessionId = `0x${randomBytes(32).toString('hex')}`;
     const seed = randomBytes(4).readUInt32LE(0);
-    const ticket = seal({ typ: 'ticket', sessionId, seed, address, startedAt, exp: startedAt + TICKET_TTL });
-    return c.json({ ticket, seed, simVersion: SIM_VERSION });
+    const ticket = seal({ typ: 'ticket', sessionId, seed, arena, address, startedAt, exp: startedAt + TICKET_TTL });
+    return c.json({ ticket, seed, arena, simVersion: SIM_VERSION });
   });
 
   app.post(
@@ -233,7 +236,7 @@ export function createApp(env = process.env, { now = Date.now, limits = DEFAULT_
       if (inputs.length * TICK > elapsed + REALTIME_SLACK_SEC) {
         return c.json({ error: 'Run berjalan lebih cepat dari waktu nyata.' }, 422);
       }
-      const result = replayRun(ticket.seed, inputs);
+      const result = replayRun(ticket.seed, inputs, ticket.arena);
       if (!result.ok) return c.json({ error: result.error }, 422);
       const stats = result.stats;
       if (STAT_KEYS.some((k) => body[k] !== stats[k])) {

@@ -9,7 +9,7 @@ import { sfx } from './audio.js';
 import { music } from './music.js';
 import { POWERUPS, WEAPONS } from './rules.js';
 import { ReplayWriter } from './replay.js';
-import { ARENA, DASH_COOLDOWN, EYE_HEIGHT, MAX_HP, PILLARS, Sim, TICK } from './sim.js';
+import { ARENA, ARENAS, DASH_COOLDOWN, DEFAULT_ARENA, EYE_HEIGHT, LOW_COVER, MAX_HP, Sim, TICK } from './sim.js';
 import { TouchControls } from './touch.js';
 import { blockTexture, buildEnemyModel, buildGun, buildPickup, DEFAULT_SKIN, floorTexture, starField, unitBox } from './voxel.js';
 
@@ -34,6 +34,12 @@ const neon = (hex, k = NEON) => {
   return m;
 };
 const ringGeometry = new THREE.RingGeometry(0.7, 1, 24);
+
+// Per-arena look: neon colours, wall tint range ([r, g, b] min and max) and sky/fog colour.
+const ARENA_THEMES = {
+  citadel: { primary: 0xff3fa4, secondary: 0x3ff2ff, tintMin: [0.82, 0.82, 0.82], tintMax: [1, 1, 1], sky: 0x120a24 },
+  foundry: { primary: 0xff7b29, secondary: 0x3fe0c5, tintMin: [0.95, 0.62, 0.5], tintMax: [1, 0.78, 0.62], sky: 0x1a0d12 },
+};
 
 const WHITE = new THREE.Color(0xffffff);
 const ENRAGED = new THREE.Color(0xff2040);
@@ -177,17 +183,13 @@ export class Game {
 
   // ---------- setup ----------
 
+  /** Everything that is the same in every arena: lights, ground, skyline, stars, dust. */
   buildWorld() {
     const s = this.scene;
     s.add(new THREE.HemisphereLight(0xb79bff, 0x1a0f2e, 1.5));
     const sun = new THREE.DirectionalLight(0xffd9f0, 2.0);
     sun.position.set(10, 20, 6);
     s.add(sun);
-    const pink = new THREE.PointLight(0xff3fa4, 10, 30, 1);
-    pink.position.set(-12, 5, -12);
-    const cyan = new THREE.PointLight(0x3ff2ff, 10, 30, 1);
-    cyan.position.set(12, 5, 12);
-    s.add(pink, cyan);
 
     const ftex = floorTexture();
     ftex.repeat.set(ARENA, ARENA);
@@ -200,50 +202,9 @@ export class Game {
     ground.position.y = -0.02;
     s.add(ground);
 
-    // Walls + pillars as one instanced mesh of unit voxels
-    const cells = [];
-    for (let y = 0; y < 3; y++) {
-      for (let i = -ARENA; i < ARENA; i++) {
-        const c = i + 0.5;
-        cells.push([c, y + 0.5, -ARENA + 0.5], [c, y + 0.5, ARENA - 0.5]);
-        if (i > -ARENA && i < ARENA - 1) cells.push([-ARENA + 0.5, y + 0.5, c], [ARENA - 0.5, y + 0.5, c]);
-      }
-    }
-    const glowMat = neon(0x3ff2ff);
-    this.pillarGlow = { mat: glowMat, base: glowMat.color.clone() };
-    for (const [px, pz, h] of PILLARS) {
-      for (let y = 0; y < h; y++) {
-        for (const dx of [-0.5, 0.5]) for (const dz of [-0.5, 0.5]) cells.push([px + dx, y + 0.5, pz + dz]);
-      }
-      const glow = new THREE.Mesh(unitBox, glowMat);
-      glow.scale.setScalar(0.5);
-      glow.position.set(px, h + 0.25, pz);
-      s.add(glow);
-    }
-    const blocks = new THREE.InstancedMesh(unitBox, new THREE.MeshLambertMaterial({ map: blockTexture() }), cells.length);
-    const m = new THREE.Matrix4();
-    const col = new THREE.Color();
-    cells.forEach(([x, y, z], i) => {
-      blocks.setMatrixAt(i, m.makeTranslation(x, y, z));
-      const v = 0.82 + Math.random() * 0.18;
-      blocks.setColorAt(i, col.setRGB(v, v, v));
-    });
-    s.add(blocks);
-
-    const trimMat = neon(0xff3fa4, 1.1);
-    this.trim = { mat: trimMat, base: trimMat.color.clone() };
-    for (const [sx, sz, x, z] of [
-      [ARENA * 2, 1.02, 0, -ARENA + 0.5],
-      [ARENA * 2, 1.02, 0, ARENA - 0.5],
-      [1.02, ARENA * 2, -ARENA + 0.5, 0],
-      [1.02, ARENA * 2, ARENA - 0.5, 0],
-    ]) {
-      const trim = new THREE.Mesh(unitBox, trimMat);
-      trim.scale.set(sx, 0.1, sz);
-      trim.position.set(x, 3.05, z);
-      s.add(trim);
-    }
-
+    this.blockTexture = blockTexture();
+    this.arenaGroup = new THREE.Group();
+    s.add(this.arenaGroup);
     const towerMat = new THREE.MeshLambertMaterial({ color: 0x1c1233 });
     const capMats = [neon(0xff3fa4, 2), neon(0x3ff2ff, 2)];
     for (let i = 0; i < 48; i++) {
@@ -274,6 +235,84 @@ export class Game {
       new THREE.PointsMaterial({ color: 0xb79bff, size: 1, sizeAttenuation: false, transparent: true, opacity: 0.55 }),
     );
     s.add(this.dust);
+  }
+
+  /** Walls, cover, lights and colours for one arena; rebuilt only when the arena changes. */
+  buildArena(id) {
+    if (this.arenaId === id) return;
+    this.arenaId = id;
+    const theme = ARENA_THEMES[id];
+    const group = this.arenaGroup;
+    group.traverse((o) => {
+      if (o.isMesh) o.material.dispose(); // the block texture is shared and survives
+      if (o.isInstancedMesh) o.dispose();
+    });
+    group.clear();
+
+    this.scene.background.setHex(theme.sky);
+    this.scene.fog.color.setHex(theme.sky);
+    const a = new THREE.PointLight(theme.primary, 10, 30, 1);
+    a.position.set(-12, 5, -12);
+    const b = new THREE.PointLight(theme.secondary, 10, 30, 1);
+    b.position.set(12, 5, 12);
+    group.add(a, b);
+
+    // Perimeter wall and cover blocks as one instanced mesh of unit voxels.
+    const cells = [];
+    for (let y = 0; y < 3; y++) {
+      for (let i = -ARENA; i < ARENA; i++) {
+        const c = i + 0.5;
+        cells.push([c, y + 0.5, -ARENA + 0.5], [c, y + 0.5, ARENA - 0.5]);
+        if (i > -ARENA && i < ARENA - 1) cells.push([-ARENA + 0.5, y + 0.5, c], [ARENA - 0.5, y + 0.5, c]);
+      }
+    }
+    const glowMat = neon(theme.secondary);
+    const ledgeMat = neon(theme.primary, 1.4);
+    this.pillarGlow = { mat: glowMat, base: glowMat.color.clone() };
+    for (const [x, z, w, d, h] of ARENAS[id].blocks) {
+      for (let y = 0; y < Math.ceil(h); y++) {
+        for (let ix = 0; ix < w; ix++) {
+          for (let iz = 0; iz < d; iz++) cells.push([x - w / 2 + ix + 0.5, y + 0.5, z - d / 2 + iz + 0.5]);
+        }
+      }
+      if (h > LOW_COVER) {
+        const glow = new THREE.Mesh(unitBox, glowMat);
+        glow.scale.setScalar(0.5);
+        glow.position.set(x, h + 0.25, z);
+        group.add(glow);
+      } else {
+        // A neon ledge marks waist-high cover you can shoot over.
+        const ledge = new THREE.Mesh(unitBox, ledgeMat);
+        ledge.scale.set(w + 0.02, 0.08, d + 0.02);
+        ledge.position.set(x, h + 0.04, z);
+        group.add(ledge);
+      }
+    }
+    const blocks = new THREE.InstancedMesh(unitBox, new THREE.MeshLambertMaterial({ map: this.blockTexture }), cells.length);
+    const m = new THREE.Matrix4();
+    const col = new THREE.Color();
+    cells.forEach(([x, y, z], i) => {
+      blocks.setMatrixAt(i, m.makeTranslation(x, y, z));
+      const k = Math.random();
+      const [r0, g0, b0] = theme.tintMin;
+      const [r1, g1, b1] = theme.tintMax;
+      blocks.setColorAt(i, col.setRGB(r0 + (r1 - r0) * k, g0 + (g1 - g0) * k, b0 + (b1 - b0) * k));
+    });
+    group.add(blocks);
+
+    const trimMat = neon(theme.primary, 1.1);
+    this.trim = { mat: trimMat, base: trimMat.color.clone() };
+    for (const [sx, sz, x, z] of [
+      [ARENA * 2, 1.02, 0, -ARENA + 0.5],
+      [ARENA * 2, 1.02, 0, ARENA - 0.5],
+      [1.02, ARENA * 2, -ARENA + 0.5, 0],
+      [1.02, ARENA * 2, ARENA - 0.5, 0],
+    ]) {
+      const trim = new THREE.Mesh(unitBox, trimMat);
+      trim.scale.set(sx, 0.1, sz);
+      trim.position.set(x, 3.05, z);
+      group.add(trim);
+    }
   }
 
   buildWeapons() {
@@ -404,11 +443,12 @@ export class Game {
 
   // ---------- lifecycle ----------
 
-  start({ seed } = {}) {
+  start({ seed, arena = DEFAULT_ARENA } = {}) {
     sfx.unlock();
     this.resize();
     this.clearViews();
-    this.sim = new Sim(seed ?? crypto.getRandomValues(new Uint32Array(1))[0]);
+    this.buildArena(arena);
+    this.sim = new Sim(seed ?? crypto.getRandomValues(new Uint32Array(1))[0], { arena });
     this.replay = new ReplayWriter(); // every input the sim consumes, for server-side verification
     this.aim = { yaw: 0, pitch: 0 };
     this.pending = { dash: false, reload: false, weapon: -1 };
@@ -647,6 +687,10 @@ export class Game {
         }
         case 'shot':
           this.onShot(ev);
+          break;
+        case 'blocked':
+          this.burst(this.tmp.set(ev.x, ev.y, ev.z), [0x3fa9ff, 0xffffff], 5, 4, 0.08);
+          sfx.at(this.spot(ev.x, ev.z), 'shieldHit');
           break;
         case 'impact':
           this.burst(this.tmp.set(ev.x, ev.y, ev.z), [0x8b7bd8, 0x5b4a92], 4, 3, 0.08);

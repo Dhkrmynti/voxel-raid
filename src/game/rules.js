@@ -6,6 +6,7 @@ export const ENEMY_TYPES = {
   runner: { hp: 22, speed: 6.8, dmg: 6, score: 150, radius: 0.5 },
   shooter: { hp: 55, speed: 2.4, dmg: 8, score: 200, radius: 0.6, ranged: true },
   exploder: { hp: 30, speed: 5.2, dmg: 30, score: 120, radius: 0.55 },
+  shielder: { hp: 90, speed: 2.8, dmg: 14, score: 260, radius: 0.75 },
   boss: { hp: 700, speed: 2.1, dmg: 25, score: 2500, radius: 1.9, ranged: true },
 };
 
@@ -57,9 +58,10 @@ export function waveRoster(n, rng) {
   const list = [];
   for (let i = 0; i < waveRegularCount(n); i++) {
     const r = rng();
-    if (n >= 4 && r < 0.15) list.push('exploder');
-    else if (n >= 3 && r < 0.35) list.push('shooter');
-    else if (n >= 2 && r < 0.6) list.push('runner');
+    if (n >= 5 && r < 0.1) list.push('shielder');
+    else if (n >= 4 && r < 0.25) list.push('exploder');
+    else if (n >= 3 && r < 0.42) list.push('shooter');
+    else if (n >= 2 && r < 0.65) list.push('runner');
     else list.push('grunt');
   }
   if (isBossWave(n)) list.splice(1, 0, 'boss');

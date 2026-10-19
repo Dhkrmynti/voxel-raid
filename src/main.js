@@ -46,6 +46,28 @@ async function getGame() {
   return game;
 }
 
+// ---------- arena choice ----------
+
+const ARENA_KEY = 'voxelraid.arena.v1';
+function selectedArena() {
+  return $('[data-arena][aria-checked="true"]')?.dataset.arena ?? 'citadel';
+}
+function selectArena(id) {
+  document.querySelectorAll('[data-arena]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.arena === id)));
+  try {
+    localStorage.setItem(ARENA_KEY, id);
+  } catch {
+    // remembered for this session only
+  }
+}
+document.querySelectorAll('[data-arena]').forEach((b) => b.addEventListener('click', () => selectArena(b.dataset.arena)));
+try {
+  const saved = localStorage.getItem(ARENA_KEY);
+  if (saved && $(`[data-arena="${saved}"]`)) selectArena(saved);
+} catch {
+  // default arena
+}
+
 async function startGame() {
   landing.hidden = true;
   heroCanvas.hidden = true;
@@ -56,12 +78,13 @@ async function startGame() {
   const name = currentPlayer()?.name ?? 'GUEST';
   $('#hud-pilot').textContent = name;
   // Ranked runs must use the server's seed, so wait for the ticket before the first tick.
-  const [ranked, g] = await Promise.all([startRankedRun(), getGame()]);
+  const arena = selectedArena();
+  const [ranked, g] = await Promise.all([startRankedRun(arena), getGame()]);
   if (myRun !== runId) return;
   rankedRun = ranked;
   $('#hud-pilot').textContent = ranked ? `${name} · RANKED` : name;
   g.setSkin(equippedSkin());
-  g.start({ seed: ranked?.seed });
+  g.start({ seed: ranked?.seed, arena });
 }
 
 function toMenu() {

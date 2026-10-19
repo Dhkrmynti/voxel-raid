@@ -2,7 +2,7 @@
 import { EYE_HEIGHT, idleInput } from '../src/game/sim.js';
 
 // Head height per enemy type (model space), so the bot lands crits on every kind of enemy.
-const AIM_Y = { grunt: 1.35, runner: 0.65, shooter: 1.6, exploder: 0.75, boss: 1.5 };
+const AIM_Y = { grunt: 1.35, runner: 0.65, shooter: 1.6, exploder: 0.75, shielder: 1.95, boss: 1.5 };
 
 /** A simple aimbot: faces the nearest enemy's head, fires, grabs coins, switches to the best weapon. */
 export function botInput(sim, tick) {
@@ -31,8 +31,8 @@ export function botInput(sim, tick) {
 }
 
 /** Plays a bot run on `Sim` until the player dies; returns the inputs and the final sim. */
-export function playToDeath(Sim, seed, maxTicks = 60 * 60 * 30) {
-  const sim = new Sim(seed);
+export function playToDeath(Sim, seed, maxTicks = 60 * 60 * 30, options = {}) {
+  const sim = new Sim(seed, options);
   const inputs = [];
   for (let t = 0; t < maxTicks && !sim.over; t++) {
     const input = botInput(sim, t);

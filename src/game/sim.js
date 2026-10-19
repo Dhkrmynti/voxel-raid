@@ -41,19 +41,53 @@ const EXPLOSION_RADIUS = 3.5;
 const EXPLOSION_ENEMY_DMG = 60;
 const BOSS_SCALE = 2.6;
 
-// [x, z, height] — each pillar has a 2x2 footprint
-export const PILLARS = [
-  [-12, -12, 4],
-  [12, -12, 4],
-  [-12, 12, 4],
-  [12, 12, 4],
-  [0, -19, 3],
-  [0, 19, 3],
-  [-19, 0, 3],
-  [19, 0, 3],
-  [-6, 5, 2],
-  [6, -5, 2],
-];
+// Cover per arena as [centerX, centerZ, width, depth, height]. Blocks no taller than
+// LOW_COVER stop movement but can be shot over from eye height (waist-high cover).
+export const LOW_COVER = 1.2;
+export const ARENAS = {
+  citadel: {
+    name: 'CITADEL',
+    blocks: [
+      [-12, -12, 2, 2, 4],
+      [12, -12, 2, 2, 4],
+      [-12, 12, 2, 2, 4],
+      [12, 12, 2, 2, 4],
+      [0, -19, 2, 2, 3],
+      [0, 19, 2, 2, 3],
+      [-19, 0, 2, 2, 3],
+      [19, 0, 2, 2, 3],
+      [-6, 5, 2, 2, 2],
+      [6, -5, 2, 2, 2],
+    ],
+  },
+  foundry: {
+    name: 'FOUNDRY',
+    blocks: [
+      // L-shaped corner bunkers
+      [-16, -18, 8, 2, 3],
+      [-19, -15, 2, 4, 3],
+      [16, -18, 8, 2, 3],
+      [19, -15, 2, 4, 3],
+      [-16, 18, 8, 2, 3],
+      [-19, 15, 2, 4, 3],
+      [16, 18, 8, 2, 3],
+      [19, 15, 2, 4, 3],
+      // waist-high cross around the open centre
+      [0, -6, 2, 6, 1],
+      [0, 6, 2, 6, 1],
+      [-6, 0, 6, 2, 1],
+      [6, 0, 6, 2, 1],
+      // tall sight-blockers
+      [-22, 0, 2, 2, 4],
+      [22, 0, 2, 2, 4],
+      [0, -22, 2, 2, 4],
+      [0, 22, 2, 2, 4],
+      [-10, -10, 2, 2, 3],
+      [10, 10, 2, 2, 3],
+    ],
+  },
+};
+export const DEFAULT_ARENA = 'citadel';
 
 // Hitboxes in model space (before scale), model facing +Z. `crit` marks the weak spot.
 const HITBOXES = {
@@ -73,11 +107,19 @@ const HITBOXES = {
     { min: [-0.45, 0, -0.45], max: [0.45, 1.08, 0.45] },
     { min: [-0.12, 1.08, -0.12], max: [0.12, 1.4, 0.12], crit: true },
   ],
+  // The front panel blocks shots (`shield`); the visor above it is still a weak spot.
+  shielder: [
+    { min: [-0.6, 0, -0.45], max: [0.6, 1.7, 0.45] },
+    { min: [-0.35, 1.7, -0.35], max: [0.35, 2.15, 0.38], crit: true },
+    { min: [-0.75, 0.1, 0.5], max: [0.75, 1.75, 0.68], shield: true },
+  ],
   boss: [
     { min: [-0.65, 0, -0.5], max: [0.65, 1.15, 0.5] },
     { min: [-0.65, 1.15, -0.5], max: [0.65, 1.95, 0.55], crit: true },
   ],
 };
+// How fast enemies turn to face the player (higher = snappier). Shielders turn slowly so they can be flanked.
+const TURN_RATE = { shielder: 2.2 };
 
 const STREAKS = { 3: 'TRIPLE KILL', 5: 'RAMPAGE', 8: 'UNSTOPPABLE', 12: 'GODLIKE', 20: 'VOXEL LEGEND' };
 const POWERUP_KINDS = ['rapid', 'double', 'shield'];
@@ -132,12 +174,20 @@ export const idleInput = (yaw = 0, pitch = 0) => ({
 });
 
 export class Sim {
-  constructor(seed) {
+  constructor(seed, { arena = DEFAULT_ARENA } = {}) {
+    if (!ARENAS[arena]) throw new Error(`Unknown arena: ${arena}`);
     this.seed = seed >>> 0;
+    this.arena = arena;
     this.rng = mulberry32(this.seed);
     this.nextId = 1;
     this.events = [];
-    this.colliders = PILLARS.map(([x, z, h]) => ({ minX: x - 1, maxX: x + 1, minZ: z - 1, maxZ: z + 1, h }));
+    this.colliders = ARENAS[arena].blocks.map(([x, z, w, dz, h]) => ({
+      minX: x - w / 2,
+      maxX: x + w / 2,
+      minZ: z - dz / 2,
+      maxZ: z + dz / 2,
+      h,
+    }));
 
     this.player = {
       x: 0,
@@ -404,10 +454,17 @@ export class Sim {
     const hits = [];
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const h = this.rayEnemy(e, o, d);
+      const h = this.rayEnemy(e, o, d, !!def.pierce);
       if (h.t < wallT) hits.push({ e, ...h });
     }
     hits.sort((a, b) => a.t - b.t || a.e.id - b.e.id);
+    // A shield in front stops a normal shot cold; the rail ignores shields (see rayEnemy).
+    if (!def.pierce && hits[0]?.shield) {
+      const t = hits[0].t;
+      const end = { x: o[0] + d[0] * t, y: o[1] + d[1] * t, z: o[2] + d[2] * t };
+      this.emit({ t: 'blocked', id: hits[0].e.id, ...end });
+      return end;
+    }
     const struck = def.pierce ? hits : hits.slice(0, 1);
     for (const h of struck) {
       let dmg = def.dmg;
@@ -435,7 +492,8 @@ export class Sim {
     return t;
   }
 
-  rayEnemy(e, o, d) {
+  /** Nearest hitbox the ray enters; `ignoreShield` lets piercing shots pass shield panels. */
+  rayEnemy(e, o, d, ignoreShield = false) {
     const s = e.scale;
     const c = dcos(e.yaw);
     const n = dsin(e.yaw);
@@ -447,14 +505,17 @@ export class Sim {
     const ld = [(d[0] * c - d[2] * n) / s, d[1] / s, (d[0] * n + d[2] * c) / s];
     let best = Infinity;
     let crit = false;
+    let shield = false;
     for (const box of HITBOXES[e.type]) {
+      if (box.shield && ignoreShield) continue;
       const t = rayBox(lo, ld, box.min, box.max);
       if (t < best) {
         best = t;
         crit = !!box.crit;
+        shield = !!box.shield;
       }
     }
-    return { t: best, crit };
+    return { t: best, crit, shield };
   }
 
   // ---------- waves ----------
@@ -640,7 +701,7 @@ export class Sim {
         }
       } else e.stuckT = 0;
 
-      e.yaw = lerpAngle(e.yaw, datan2(dx, dz), 1 - dexp(-10 * dt));
+      e.yaw = lerpAngle(e.yaw, datan2(dx, dz), 1 - dexp(-(TURN_RATE[e.type] ?? 10) * dt));
       e.walk += dt * speed * 2.2;
       e.attackAnim = Math.max(0, e.attackAnim - dt * 3);
 
