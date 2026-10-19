@@ -19,6 +19,8 @@ function loadWorker(network) {
       put: async (r, res) => void store.set(key(r), res),
       match: async (r) => store.get(key(r)),
       addAll: async (urls) => urls.forEach((u) => store.set(key(u), new Response(`cached ${u}`))),
+      keys: async () => [...store.keys()].map((url) => ({ url })),
+      delete: async (r) => store.delete(key(r)),
     };
   };
   const caches = {
@@ -44,13 +46,18 @@ function loadWorker(network) {
     calls.push(new URL(req.url ?? req).pathname);
     return network(req);
   };
-  vm.runInNewContext(read('public/sw.js'), { self, caches, fetch, URL, Response, Promise });
+  // Timers run 100× faster so the page timeout can be tested quickly.
+  const fastTimeout = (fn, ms) => setTimeout(fn, ms / 100);
+  vm.runInNewContext(read('public/sw.js'), { self, caches, fetch, URL, Response, Promise, setTimeout: fastTimeout });
 
   async function dispatch(type, extra = {}) {
-    let pending = null;
-    const event = { ...extra, waitUntil: (p) => (pending = p), respondWith: (p) => (pending = p) };
+    let response = null;
+    const background = [];
+    const event = { ...extra, waitUntil: (p) => background.push(p), respondWith: (p) => (response = p) };
     listeners[type](event);
-    return { handled: pending !== null, result: await pending };
+    const result = await (response ?? background[0]);
+    await Promise.all(background);
+    return { handled: response !== null || background.length > 0, result };
   }
   const request = (path, mode = 'cors', method = 'GET') => ({ url: new URL(path, ORIGIN).href, mode, method });
   return { stores, calls, dispatch, request };
@@ -72,8 +79,8 @@ describe('pwa', () => {
     sw.stores.set('voxelraid-shell-v0', new Map());
     await sw.dispatch('install');
     await sw.dispatch('activate');
-    assert.deepEqual([...sw.stores.keys()], ['voxelraid-shell-v1']);
-    assert.equal(sw.stores.get('voxelraid-shell-v1').size, 4);
+    assert.deepEqual([...sw.stores.keys()], ['voxelraid-shell-v2']);
+    assert.equal(sw.stores.get('voxelraid-shell-v2').size, 4);
   });
 
   it('pages are network first with an offline fallback', async () => {
@@ -85,6 +92,39 @@ describe('pwa', () => {
     online = false;
     const offline = await sw.dispatch('fetch', { request: sw.request('/?mockWallet', 'navigate') });
     assert.equal(await offline.result.text(), 'fresh page');
+  });
+
+  it('a hanging network falls back to the cached page', async () => {
+    let online = true;
+    const sw = loadWorker(() => (online ? new Response('page') : new Promise(() => {})));
+    await sw.dispatch('install');
+    await sw.dispatch('fetch', { request: sw.request('/', 'navigate') });
+    online = false;
+    const slow = await sw.dispatch('fetch', { request: sw.request('/', 'navigate') });
+    assert.equal(await slow.result.text(), 'page');
+  });
+
+  it('manifest and icons are served from cache and refreshed in the background', async () => {
+    const sw = loadWorker(() => new Response('new manifest'));
+    await sw.dispatch('install');
+    const first = await sw.dispatch('fetch', { request: sw.request('/manifest.webmanifest') });
+    assert.equal(await first.result.text(), 'cached /manifest.webmanifest');
+    const second = await sw.dispatch('fetch', { request: sw.request('/manifest.webmanifest') });
+    assert.equal(await second.result.text(), 'new manifest');
+  });
+
+  it('an HTML fallback for a missing chunk is not cached, and old chunks are evicted', async () => {
+    const sw = loadWorker((req) =>
+      req.url.endsWith('missing.js')
+        ? new Response('<!doctype html>', { headers: { 'content-type': 'text/html' } })
+        : new Response('js', { headers: { 'content-type': 'text/javascript' } }),
+    );
+    await sw.dispatch('fetch', { request: sw.request('/assets/missing.js') });
+    assert.equal(sw.stores.get('voxelraid-assets-v2'), undefined);
+    for (let i = 0; i < 70; i++) await sw.dispatch('fetch', { request: sw.request(`/assets/chunk-${i}.js`) });
+    const kept = [...sw.stores.get('voxelraid-assets-v2').keys()];
+    assert.equal(kept.length, 60);
+    assert.ok(kept.at(-1).endsWith('chunk-69.js') && !kept.some((k) => k.endsWith('chunk-0.js')));
   });
 
   it('hashed assets are cache first', async () => {
