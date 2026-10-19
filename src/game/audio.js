@@ -3,6 +3,8 @@ let ctx = null;
 let master = null;
 let noiseBuf = null;
 let muted = false;
+let volume = 1;
+const MASTER = 0.35;
 let spot = null; // { pan, vol } of the positional sound currently being played
 
 /** Shared AudioContext (created lazily after a user gesture); music.js plays through it too. */
@@ -25,7 +27,7 @@ function ac() {
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.35;
+    master.gain.value = MASTER * volume;
     master.connect(ctx.destination);
   }
   if (ctx.state === 'suspended') ctx.resume();
@@ -82,6 +84,11 @@ export const sfx = {
   },
   setMuted(value) {
     muted = value;
+  },
+  /** 0–1, on top of the mix level. */
+  setVolume(value) {
+    volume = value;
+    if (master) master.gain.value = MASTER * volume;
   },
   /** Plays `name` panned/attenuated for a world position: sfx.at({ pan, vol }, 'explode'). */
   at(where, name) {

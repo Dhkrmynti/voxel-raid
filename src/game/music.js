@@ -25,6 +25,8 @@ const freq = (m) => 440 * 2 ** ((m - 69) / 12);
 let out = null;
 let noiseBuf = null;
 let muted = false;
+let volume = 1;
+const level = () => (muted || !playing ? 0 : VOLUME * volume);
 let playing = false;
 let intensity = 0;
 let step = 0;
@@ -127,8 +129,8 @@ export const music = {
       out.connect(c.destination);
     }
     out.gain.cancelScheduledValues(c.currentTime);
-    out.gain.setValueAtTime(muted ? 0 : VOLUME, c.currentTime);
     playing = true;
+    out.gain.setValueAtTime(level(), c.currentTime);
     step = 0;
     nextTime = c.currentTime + 0.05;
     timer = setInterval(tick, SCHEDULER_MS);
@@ -151,7 +153,13 @@ export const music = {
   setMuted(value) {
     muted = value;
     const c = audioContext();
-    if (out && c) out.gain.setValueAtTime(value || !playing ? 0 : VOLUME, c.currentTime);
+    if (out && c) out.gain.setValueAtTime(level(), c.currentTime);
+  },
+  /** 0–1, on top of the mix level. */
+  setVolume(value) {
+    volume = value;
+    const c = audioContext();
+    if (out && c) out.gain.setValueAtTime(level(), c.currentTime);
   },
   /** 1 exactly on a beat, decaying to 0 — drives the arena's neon pulse. */
   pulse() {

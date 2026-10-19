@@ -1,7 +1,7 @@
 import './style.css';
 import { sfx } from './game/audio.js';
 import { music } from './game/music.js';
-import { loadSettings, QUALITY_MODES, saveSettings } from './settings.js';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings.js';
 import { loadScores, playerSummary, saveScore } from './scores.js';
 import { equippedSkin, initArsenalUI, refresh as refreshArsenal } from './ui/arsenalUI.js';
 import { avatarImg, currentPlayer, initWalletUI } from './ui/walletUI.js';
@@ -40,6 +40,7 @@ async function getGame() {
     const { Game } = await loadGame();
     game = new Game({ container: gameEl, onGameOver: showGameOver, onMuteKey: toggleAllSound, touch: TOUCH });
     game.setQualityMode(settings.quality);
+    game.setControls(settings);
     if (import.meta.env.DEV) window.__game = game;
   }
   return game;
@@ -282,21 +283,64 @@ $('#menu-btn').addEventListener('click', toMenu);
 $('#resume-btn').addEventListener('click', () => game?.resume());
 $('#quit-btn').addEventListener('click', toMenu);
 const settings = loadSettings();
-const SETTING_LABELS = { sfx: 'SUARA', music: 'MUSIK', quality: 'KUALITAS' };
-const QUALITY_LABELS = { auto: 'AUTO', high: 'TINGGI', low: 'RENDAH' };
+const settingsModal = $('#settings-modal');
+const settingsForm = $('#settings-form');
+const SETTING_FORMAT = {
+  sensitivity: (v) => `×${v.toFixed(1)}`,
+  touchSensitivity: (v) => `×${v.toFixed(1)}`,
+  fov: (v) => `${v}°`,
+  sfxVolume: (v) => `${Math.round(v * 100)}%`,
+  musicVolume: (v) => `${Math.round(v * 100)}%`,
+};
+let appliedQuality = null;
 
 function applySettings() {
   sfx.setMuted(!settings.sfx);
+  sfx.setVolume(settings.sfxVolume);
   music.setMuted(!settings.music);
-  game?.setQualityMode(settings.quality);
-  document.querySelectorAll('[data-setting]').forEach((b) => {
-    const key = b.dataset.setting;
-    const value = key === 'quality' ? QUALITY_LABELS[settings.quality] : settings[key] ? 'ON' : 'OFF';
-    b.textContent = `${SETTING_LABELS[key]}: ${value}`;
-    if (key !== 'quality') b.setAttribute('aria-pressed', String(settings[key]));
-  });
+  music.setVolume(settings.musicVolume);
+  game?.setControls(settings);
+  // Re-applying quality restarts AUTO's frame-rate measurement, so only do it on change.
+  if (game && appliedQuality !== settings.quality) {
+    game.setQualityMode(settings.quality);
+    appliedQuality = settings.quality;
+  }
   saveSettings(settings);
 }
+
+function renderSettingsForm() {
+  for (const el of settingsForm.elements) {
+    if (!el.name) continue;
+    if (el.type === 'checkbox') el.checked = settings[el.name];
+    else el.value = settings[el.name];
+  }
+  for (const out of settingsForm.querySelectorAll('output')) {
+    out.textContent = SETTING_FORMAT[out.dataset.for](settings[out.dataset.for]);
+  }
+}
+
+settingsForm.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.name) return;
+  settings[el.name] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? Number(el.value) : el.value;
+  renderSettingsForm();
+  applySettings();
+});
+settingsForm.addEventListener('submit', (e) => e.preventDefault());
+$('#settings-reset').addEventListener('click', () => {
+  Object.assign(settings, DEFAULT_SETTINGS);
+  renderSettingsForm();
+  applySettings();
+});
+document.querySelectorAll('[data-open-settings]').forEach((b) =>
+  b.addEventListener('click', () => {
+    renderSettingsForm();
+    settingsModal.showModal();
+  }),
+);
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal || e.target.closest('[data-close]')) settingsModal.close();
+});
 
 // M in-game mutes or unmutes sound and music together.
 function toggleAllSound() {
@@ -306,14 +350,6 @@ function toggleAllSound() {
   applySettings();
 }
 
-document.querySelectorAll('[data-setting]').forEach((b) =>
-  b.addEventListener('click', () => {
-    const key = b.dataset.setting;
-    if (key === 'quality') settings.quality = QUALITY_MODES[(QUALITY_MODES.indexOf(settings.quality) + 1) % QUALITY_MODES.length];
-    else settings[key] = !settings[key];
-    applySettings();
-  }),
-);
 applySettings();
 
 if (TOUCH) $('#touch-note').hidden = false;

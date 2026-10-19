@@ -25,7 +25,10 @@
           <a href="#arsenal">Arsenal</a>
           <a href="#roadmap">Roadmap</a>
         </nav>
-        <button class="btn btn-sm btn-wallet" data-wallet>CONNECT WALLET</button>
+        <div class="nav-actions">
+          <button class="btn btn-sm btn-ghost" type="button" data-open-settings>SETELAN</button>
+          <button class="btn btn-sm btn-wallet" data-wallet>CONNECT WALLET</button>
+        </div>
       </header>
 
       <section class="hero">
@@ -352,9 +355,7 @@
           <p class="muted">Klik lanjut untuk mengunci mouse lagi.</p>
           <div class="panel-actions">
             <button class="btn btn-primary" id="resume-btn">▶ LANJUT</button>
-            <button class="btn btn-ghost" type="button" data-setting="sfx"></button>
-            <button class="btn btn-ghost" type="button" data-setting="music"></button>
-            <button class="btn btn-ghost" type="button" data-setting="quality"></button>
+            <button class="btn btn-ghost" type="button" data-open-settings>SETELAN</button>
             <button class="btn btn-ghost" id="quit-btn">KELUAR</button>
           </div>
         </div>
@@ -382,6 +383,73 @@
         </div>
       </div>
     </div>
+
+    <dialog id="settings-modal" class="modal" aria-labelledby="settings-title">
+      <div class="modal-head">
+        <h2 id="settings-title">SETELAN</h2>
+        <button class="modal-close" type="button" data-close aria-label="Tutup">✕</button>
+      </div>
+      <form class="modal-body settings" id="settings-form">
+        <fieldset>
+          <legend>KONTROL</legend>
+          <label class="setting">
+            <span>Sensitivitas mouse</span>
+            <input type="range" name="sensitivity" min="0.2" max="3" step="0.1" />
+            <output data-for="sensitivity"></output>
+          </label>
+          <label class="setting">
+            <span>Sensitivitas sentuh</span>
+            <input type="range" name="touchSensitivity" min="0.3" max="3" step="0.1" />
+            <output data-for="touchSensitivity"></output>
+          </label>
+          <label class="setting check">
+            <span>Balik sumbu Y (invert)</span>
+            <input type="checkbox" name="invertY" />
+          </label>
+          <label class="setting">
+            <span>Field of view</span>
+            <input type="range" name="fov" min="60" max="100" step="1" />
+            <output data-for="fov"></output>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>SUARA</legend>
+          <label class="setting check">
+            <span>Efek suara</span>
+            <input type="checkbox" name="sfx" />
+          </label>
+          <label class="setting">
+            <span>Volume efek</span>
+            <input type="range" name="sfxVolume" min="0" max="1" step="0.05" />
+            <output data-for="sfxVolume"></output>
+          </label>
+          <label class="setting check">
+            <span>Musik</span>
+            <input type="checkbox" name="music" />
+          </label>
+          <label class="setting">
+            <span>Volume musik</span>
+            <input type="range" name="musicVolume" min="0" max="1" step="0.05" />
+            <output data-for="musicVolume"></output>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>GRAFIS</legend>
+          <label class="setting">
+            <span>Kualitas</span>
+            <select name="quality">
+              <option value="auto">AUTO (menyesuaikan FPS)</option>
+              <option value="high">TINGGI</option>
+              <option value="low">RENDAH</option>
+            </select>
+          </label>
+        </fieldset>
+        <div class="panel-actions">
+          <button class="btn btn-ghost btn-sm" type="button" id="settings-reset">RESET KE BAWAAN</button>
+          <button class="btn btn-sm" type="button" data-close>SELESAI</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="wallet-modal" class="modal" aria-labelledby="wallet-title">
       <div class="modal-head">

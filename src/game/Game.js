@@ -48,6 +48,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const quantize = (v) => Math.round(v * 1e4) / 1e4;
 const quantizeStick = (v) => Math.round(v * 100) / 100;
 const TOUCH_LOOK = 0.006;
+const MOUSE_LOOK = 0.0022;
 
 export class Game {
   constructor({ container, onGameOver, onQuit, onMuteKey, touch = false }) {
@@ -67,6 +68,8 @@ export class Game {
     this.scene.background = new THREE.Color(0x120a24);
     this.scene.fog = new THREE.Fog(0x120a24, 20, 75);
 
+    // Look/FOV preferences only change how input is read, never the sim, so replays stay valid.
+    this.controls = { sensitivity: 1, touchSensitivity: 1, invertY: false, fov: BASE_FOV };
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.05, 150);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
@@ -158,8 +161,7 @@ export class Game {
       this.touchControls = new TouchControls(q('#touch-ui'), {
         onLook: (dx, dy) => {
           if (this.state !== 'playing') return;
-          this.aim.yaw -= dx * TOUCH_LOOK;
-          this.aim.pitch = clamp(this.aim.pitch - dy * TOUCH_LOOK, -1.45, 1.45);
+          this.look(dx, dy, TOUCH_LOOK * this.controls.touchSensitivity);
         },
         onPause: () => this.state === 'playing' && this.setPaused(true),
       });
@@ -344,8 +346,7 @@ export class Game {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     document.addEventListener('mousemove', (e) => {
       if (this.state !== 'playing' || document.pointerLockElement !== this.canvas) return;
-      this.aim.yaw -= e.movementX * 0.0022;
-      this.aim.pitch = clamp(this.aim.pitch - e.movementY * 0.0022, -1.45, 1.45);
+      this.look(e.movementX, e.movementY, MOUSE_LOOK * this.controls.sensitivity);
     });
     document.addEventListener('mousedown', (e) => {
       if (e.button === 0 && this.state === 'playing' && document.pointerLockElement === this.canvas) this.mouseDown = true;
@@ -373,6 +374,16 @@ export class Game {
     window.addEventListener('blur', () => {
       if (this.state === 'playing') this.setPaused(true);
     });
+  }
+
+  look(dx, dy, scale) {
+    this.aim.yaw -= dx * scale;
+    this.aim.pitch = clamp(this.aim.pitch - dy * scale * (this.controls.invertY ? -1 : 1), -1.45, 1.45);
+  }
+
+  /** Applies { sensitivity, touchSensitivity, invertY, fov } from the player's settings. */
+  setControls({ sensitivity, touchSensitivity, invertY, fov }) {
+    this.controls = { sensitivity, touchSensitivity, invertY, fov };
   }
 
   nextWeapon(dir) {
@@ -968,7 +979,7 @@ export class Game {
     cam.rotation.set(this.aim.pitch, this.aim.yaw, 0);
 
     this.fovKick = Math.max(0, this.fovKick - dt * 4);
-    const fov = BASE_FOV + this.fovKick * 10;
+    const fov = this.controls.fov + this.fovKick * 10;
     if (Math.abs(cam.fov - fov) > 0.01) {
       cam.fov = fov;
       cam.updateProjectionMatrix();
