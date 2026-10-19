@@ -11,6 +11,7 @@ import { POWERUPS, WEAPONS } from './rules.js';
 import { ReplayWriter } from './replay.js';
 import { ARENA, ARENAS, DASH_COOLDOWN, DEFAULT_ARENA, EYE_HEIGHT, LOW_COVER, MAX_HP, Sim, TICK } from './sim.js';
 import { TouchControls } from './touch.js';
+import { Tutorial } from './tutorial.js';
 import { blockTexture, buildEnemyModel, buildGun, buildPickup, DEFAULT_SKIN, floorTexture, starField, unitBox } from './voxel.js';
 
 const MAX_PROJECTILES = 256;
@@ -461,8 +462,14 @@ export class Game {
 
   // ---------- lifecycle ----------
 
-  start({ seed, arena = DEFAULT_ARENA } = {}) {
+  /**
+   * @param {{ seed?: number, arena?: string, tutorial?: () => void }} [options]
+   *   `tutorial` turns on first-run hints and is called once the player has finished them
+   */
+  start({ seed, arena = DEFAULT_ARENA, tutorial } = {}) {
     this.prepare(seed ?? crypto.getRandomValues(new Uint32Array(1))[0], arena);
+    if (tutorial)
+      this.tutorial = new Tutorial(this.container.querySelector('#tutorial'), { touch: this.touch, onDone: tutorial });
     this.replay = new ReplayWriter(); // every input the sim consumes, for server-side verification
     this.showBanner('BERSIAP!', 'Wave 1 segera dimulai');
     this.state = 'playing';
@@ -514,6 +521,8 @@ export class Game {
 
   /** Fresh sim and a clean view, shared by live games and replays. */
   prepare(seed, arena) {
+    this.tutorial?.dispose();
+    this.tutorial = null;
     sfx.unlock();
     this.resize();
     this.clearViews();
@@ -553,6 +562,8 @@ export class Game {
     this.state = 'idle';
     this.running = false;
     this.playback = null;
+    this.tutorial?.dispose();
+    this.tutorial = null;
     this.hud.pause.hidden = true;
     this.hud.replayBar.hidden = true;
     if (document.pointerLockElement) document.exitPointerLock();
@@ -608,6 +619,9 @@ export class Game {
 
   gameOver() {
     this.state = 'over';
+    // An unfinished tutorial comes back next run.
+    this.tutorial?.dispose();
+    this.tutorial = null;
     this.mouseDown = false;
     this.keys.clear();
     this.hud.bossBar.hidden = true;
@@ -847,6 +861,7 @@ export class Game {
           break;
       }
     }
+    this.tutorial?.observe(sim.events);
     sim.events.length = 0;
   }
 
@@ -1044,6 +1059,7 @@ export class Game {
       this.updateCamera(dt);
       this.syncEntities(dt);
       this.updateHud(dt);
+      if (this.state === 'playing') this.tutorial?.update(this.sim, dt);
     }
     this.updateParticles(dt);
     this.updateDebris(dt);

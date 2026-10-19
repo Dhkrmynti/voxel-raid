@@ -8,6 +8,11 @@ export function resolveChain(name) {
   return CHAINS[name] ?? robinhoodTestnet;
 }
 
+// Where to get test ETH for gas, per chain id.
+export const FAUCETS = {
+  [robinhoodTestnet.id]: 'https://www.alchemy.com/faucets/robinhood-testnet',
+};
+
 export function explorerUrl(chain) {
   return chain.id === anvil.id ? null : (chain.blockExplorers?.default?.url ?? null);
 }

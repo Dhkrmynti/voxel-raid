@@ -6,6 +6,7 @@ import { loadScores, playerSummary, saveScore } from './scores.js';
 import { loadReplay } from './replays.js';
 import { equippedSkin, initArsenalUI, refresh as refreshArsenal } from './ui/arsenalUI.js';
 import { currentDaily, initDailyUI, loadDaily, render as renderDaily } from './ui/dailyUI.js';
+import { initGuideUI } from './ui/guideUI.js';
 import { initRewardUI, refreshReward } from './ui/rewardUI.js';
 import { readWeeklyRewards } from './web3/arsenal.js';
 import { avatarImg, currentPlayer, initWalletUI } from './ui/walletUI.js';
@@ -41,6 +42,24 @@ let lastMode = { daily: false }; // what "MAIN LAGI" repeats
 let lastRun = null;
 let chainBoard = null; // last on-chain leaderboard read
 let weeklyRewards = null; // VXL per rank, read once from the token
+
+// First-run tutorial: shown until the player completes it once.
+const TUTORIAL_KEY = 'voxelraid.tutorial.v1';
+const tutorialDone = () => {
+  try {
+    return localStorage.getItem(TUTORIAL_KEY) === 'done';
+  } catch {
+    return false;
+  }
+};
+const setTutorialDone = (done) => {
+  try {
+    if (done) localStorage.setItem(TUTORIAL_KEY, 'done');
+    else localStorage.removeItem(TUTORIAL_KEY);
+  } catch {
+    // shown again next time
+  }
+};
 
 async function getGame() {
   if (!game) {
@@ -104,7 +123,11 @@ async function startGame({ daily = false } = {}) {
   $('#hud-pilot').textContent = `${name}${tag}`;
   g.setSkin(equippedSkin());
   // Guests practise the daily on the same public seed, just without a ticket.
-  g.start({ seed: ranked?.seed ?? today?.seed, arena: ranked?.arena ?? arena });
+  g.start({
+    seed: ranked?.seed ?? today?.seed,
+    arena: ranked?.arena ?? arena,
+    tutorial: tutorialDone() ? undefined : () => setTutorialDone(true),
+  });
 }
 
 async function watchReplay(source) {
@@ -460,3 +483,8 @@ loadChainBoard();
 initArsenalUI();
 initDailyUI({ onPlay: () => startGame({ daily: true }), onWatch: watchReplay });
 initRewardUI({ onClaimed: () => refreshArsenal() });
+initGuideUI();
+$('#replay-tutorial').addEventListener('click', (e) => {
+  setTutorialDone(false);
+  e.currentTarget.textContent = '✓ TUTORIAL AKAN MUNCUL LAGI';
+});

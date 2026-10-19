@@ -42,6 +42,9 @@
           <button class="btn btn-primary" data-play>▶ MAIN SEKARANG</button>
           <button class="btn btn-ghost btn-wallet" data-wallet>CONNECT WALLET</button>
         </div>
+        <p class="hint">
+          Mau ikut leaderboard on-chain? <button class="link-btn" type="button" data-open-guide>Lihat panduan ranked</button>
+        </p>
         <div class="arena-pick" role="radiogroup" aria-label="Pilih arena">
           <span class="arena-label">ARENA</span>
           <button type="button" role="radio" data-arena="citadel" aria-checked="true">CITADEL</button>
@@ -190,6 +193,9 @@
             </div>
           </div>
           <p class="tip">
+            <button class="btn btn-ghost btn-sm" type="button" id="replay-tutorial">ULANG TUTORIAL DI GAME BERIKUTNYA</button>
+          </p>
+          <p class="tip">
             Tips: tembak <b>kepala</b> untuk damage ×2. Kill beruntun dalam 3 detik menaikkan multiplier sampai <b>x5</b>. Tembak
             EXPLODER oranye sebelum dia dekat, karena ledakannya juga menghancurkan musuh di sekitarnya. SCATTER terbuka di wave
             3, RAIL di wave 6.
@@ -213,6 +219,9 @@
             <button class="btn btn-primary btn-sm" type="button" id="reward-btn" hidden>CLAIM HADIAH</button>
             <p class="reward-note" id="reward-note" role="status"></p>
           </div>
+          <p class="hint guide-hint">
+            <button class="link-btn" type="button" data-open-guide>Panduan ranked: cara masuk leaderboard →</button>
+          </p>
           <div class="tabs" role="tablist" aria-label="Jenis leaderboard">
             <button class="tab" role="tab" id="tab-chain" aria-selected="true" aria-controls="lb-chain" data-tab="chain">
               ON-CHAIN · MINGGU INI
@@ -366,6 +375,11 @@
       </div>
 
       <div id="callout" class="hud"></div>
+      <div id="tutorial" hidden>
+        <span class="tutorial-step"></span>
+        <span class="tutorial-text"></span>
+        <button class="tutorial-skip" type="button">LEWATI</button>
+      </div>
       <div id="replay-bar" hidden>
         <span id="replay-label"></span>
         <div class="replay-track"><div id="replay-progress"></div></div>
@@ -436,6 +450,21 @@
         </div>
       </div>
     </div>
+
+    <dialog id="guide-modal" class="modal" aria-labelledby="guide-title">
+      <div class="modal-head">
+        <h2 id="guide-title">PANDUAN RANKED</h2>
+        <button class="modal-close" type="button" data-close aria-label="Tutup">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">
+          Lima langkah supaya skormu masuk leaderboard on-chain dan bisa jadi token VXL. Langkah yang sudah beres dicentang
+          otomatis.
+        </p>
+        <ol class="guide-steps" id="guide-steps"></ol>
+        <p class="wallet-status" id="guide-status" role="status"></p>
+      </div>
+    </dialog>
 
     <dialog id="settings-modal" class="modal" aria-labelledby="settings-title">
       <div class="modal-head">
