@@ -22,8 +22,17 @@ export function sanitizeName(name) {
     .slice(0, 16);
 }
 
+// Names other pilots registered on the server, filled in by rememberNames().
+const serverNames = new Map();
+
+export function rememberNames(names) {
+  for (const [address, name] of Object.entries(names)) serverNames.set(address.toLowerCase(), name);
+}
+
+/** A name set in this browser wins, then the one registered on the server, then the default. */
 export function getPilotName(address) {
-  return readAll()[address.toLowerCase()] || defaultName(address);
+  const key = address.toLowerCase();
+  return readAll()[key] || serverNames.get(key) || defaultName(address);
 }
 
 export function setPilotName(address, name) {

@@ -7,3 +7,6 @@ dist
 .env
 .env.*
 !.env.example
+
+# Local server data (replays, daily boards, pilot names)
+.data/

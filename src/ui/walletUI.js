@@ -1,5 +1,6 @@
 import { identicon } from '../web3/identicon.js';
 import { getPilotName, sanitizeName, setPilotName, shortAddress } from '../web3/profile.js';
+import { api } from '../web3/api.js';
 import { onRankedChange, rankedState, refreshSession, signIn, signOut } from '../web3/ranked.js';
 import { chainName, listWallets, onWalletsChange, TARGET_CHAIN, wallet, walletErrorText } from '../web3/wallet.js';
 
@@ -208,6 +209,8 @@ export function initWalletUI({ onChange, getStats }) {
       return;
     }
     setPilotName(p.address, clean);
+    // With a ranked session the server can tie the name to this wallet, so others see it too.
+    if (rankedState().active) api.saveName(clean).catch(() => {});
     $('#name-input').value = clean;
     setStatus($('#profile-status'), 'Nama pilot disimpan.');
     renderProfile();

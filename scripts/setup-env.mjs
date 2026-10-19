@@ -19,6 +19,8 @@ if (existsSync(FILE)) {
       'SIWE_DOMAIN=localhost:5173',
       `SERVER_SIGNER_KEY=0x${randomBytes(32).toString('hex')}`,
       `SESSION_SECRET=${randomBytes(32).toString('hex')}`,
+      '# Verified replays, daily boards and pilot names',
+      'DATA_FILE=.data/store.json',
       '',
     ].join('\n'),
   );

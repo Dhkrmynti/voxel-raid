@@ -3,9 +3,12 @@ import { sfx } from './game/audio.js';
 import { music } from './game/music.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings.js';
 import { loadScores, playerSummary, saveScore } from './scores.js';
+import { loadReplay } from './replays.js';
 import { equippedSkin, initArsenalUI, refresh as refreshArsenal } from './ui/arsenalUI.js';
+import { currentDaily, initDailyUI, loadDaily, render as renderDaily } from './ui/dailyUI.js';
 import { avatarImg, currentPlayer, initWalletUI } from './ui/walletUI.js';
-import { getPilotName, shortAddress } from './web3/profile.js';
+import { api } from './web3/api.js';
+import { getPilotName, rememberNames, shortAddress } from './web3/profile.js';
 import { LEADERBOARD_ADDRESS, rankedState, readLeaderboard, startRankedRun, submitRun, txUrl } from './web3/ranked.js';
 import { TARGET_CHAIN, walletErrorText } from './web3/wallet.js';
 
@@ -31,14 +34,15 @@ const TOUCH =
 
 let game = null;
 let runId = 0;
-let rankedRun = null; // { ticket, seed } for ranked runs, null otherwise
+let rankedRun = null; // { ticket, seed, arena, mode } for ranked runs, null otherwise
+let lastMode = { daily: false }; // what "MAIN LAGI" repeats
 let lastRun = null;
 let chainBoard = null; // last on-chain leaderboard read
 
 async function getGame() {
   if (!game) {
     const { Game } = await loadGame();
-    game = new Game({ container: gameEl, onGameOver: showGameOver, onMuteKey: toggleAllSound, touch: TOUCH });
+    game = new Game({ container: gameEl, onGameOver: showGameOver, onQuit: showMenu, onMuteKey: toggleAllSound, touch: TOUCH });
     game.setQualityMode(settings.quality);
     game.setControls(settings);
     if (import.meta.env.DEV) window.__game = game;
@@ -68,29 +72,65 @@ try {
   // default arena
 }
 
-async function startGame() {
+function showGameScreen() {
   landing.hidden = true;
   heroCanvas.hidden = true;
   hero.setActive(false);
   gameEl.hidden = false;
   overEl.hidden = true;
+}
+
+/** @param {{ daily?: boolean }} [mode] daily runs share one server-chosen seed and arena per day */
+async function startGame({ daily = false } = {}) {
+  lastMode = { daily };
+  const today = daily ? currentDaily() : null;
+  if (daily && !today) {
+    $('#daily-note').textContent = 'Daily challenge belum bisa dimuat. Coba lagi sebentar.';
+    return;
+  }
+  showGameScreen();
   const myRun = ++runId;
   const name = currentPlayer()?.name ?? 'GUEST';
   $('#hud-pilot').textContent = name;
   // Ranked runs must use the server's seed, so wait for the ticket before the first tick.
-  const arena = selectedArena();
-  const [ranked, g] = await Promise.all([startRankedRun(arena), getGame()]);
+  const arena = today?.arena ?? selectedArena();
+  const [ranked, g] = await Promise.all([startRankedRun(arena, daily ? 'daily' : 'ranked'), getGame()]);
   if (myRun !== runId) return;
   rankedRun = ranked;
-  $('#hud-pilot').textContent = ranked ? `${name} · RANKED` : name;
+  const tag = ranked ? (daily ? ' · DAILY' : ' · RANKED') : daily ? ' · LATIHAN DAILY' : '';
+  $('#hud-pilot').textContent = `${name}${tag}`;
   g.setSkin(equippedSkin());
-  g.start({ seed: ranked?.seed, arena });
+  // Guests practise the daily on the same public seed, just without a ticket.
+  g.start({ seed: ranked?.seed ?? today?.seed, arena: ranked?.arena ?? arena });
+}
+
+async function watchReplay(source) {
+  const status = $('#replay-status');
+  status.textContent = 'Memuat replay…';
+  status.classList.remove('error');
+  try {
+    const [replay, g] = await Promise.all([loadReplay(source), getGame()]);
+    status.textContent = '';
+    showGameScreen();
+    $('#hud-pilot').textContent = 'REPLAY';
+    g.setSkin(null);
+    g.startReplay(replay);
+  } catch (err) {
+    status.textContent = err.message;
+    status.classList.add('error');
+  }
 }
 
 function toMenu() {
+  if (game?.running)
+    game.quit(); // quit() calls back into showMenu
+  else showMenu();
+}
+
+function showMenu() {
   loadChainBoard();
+  loadDaily();
   refreshArsenal();
-  game?.quit();
   gameEl.hidden = true;
   overEl.hidden = true;
   landing.hidden = false;
@@ -110,12 +150,12 @@ function showGameOver(stats, replay) {
   $('#go-tokens').textContent = stats.tokens;
   $('#go-best').textContent = isBest ? 'SKOR TERBAIK BARU!' : `Best: ${fmt(best)}${rank ? ` · Peringkat #${rank}` : ''}`;
   $('#go-best').classList.toggle('new', isBest);
-  lastRun = { stats, replay, ticket: rankedRun?.ticket ?? null, submitted: false };
+  lastRun = { stats, replay, ticket: rankedRun?.ticket ?? null, daily: rankedRun?.mode === 'daily', submitted: false };
   const ranked = player && rankedState().active && !!lastRun.ticket;
   $('#go-pilot').textContent = !player
     ? 'Kamu main sebagai guest. Connect wallet supaya skor & token tercatat atas namamu.'
     : ranked
-      ? `Run ranked milik ${player.name}. Kirim ke chain untuk masuk leaderboard mingguan.`
+      ? `Run ${lastRun.daily ? 'daily' : 'ranked'} milik ${player.name}. Kirim untuk masuk leaderboard${lastRun.daily ? ' daily dan' : ''} mingguan.`
       : `Tercatat lokal untuk ${player.name}. Aktifkan mode ranked di profil supaya skor bisa dikirim on-chain.`;
   $('#go-chain').hidden = !ranked;
   $('#chain-submit-btn').hidden = false;
@@ -143,10 +183,12 @@ async function submitLastRun() {
   btn.disabled = true;
   try {
     if (!lastRun.ticket) throw new Error('Run ini tidak punya tiket ranked (server offline saat game dimulai?).');
-    const hash = await submitRun(lastRun.ticket, lastRun.stats, lastRun.replay, (step) => setStatus(STEP_TEXT[step]));
+    const { hash, dailyRank } = await submitRun(lastRun.ticket, lastRun.stats, lastRun.replay, (step) =>
+      setStatus(STEP_TEXT[step]),
+    );
     lastRun.submitted = true;
     btn.hidden = true;
-    setStatus('✓ Skor tercatat on-chain! ');
+    setStatus(`✓ Skor tercatat on-chain!${dailyRank ? ` Peringkat daily #${dailyRank}.` : ''} `);
     const url = txUrl(hash);
     if (url) {
       const a = document.createElement('a');
@@ -159,6 +201,7 @@ async function submitLastRun() {
       status.append(`Tx ${shortAddress(hash)}`);
     }
     loadChainBoard();
+    loadDaily();
     refreshArsenal();
   } catch (err) {
     setStatus(err.status ? err.message : walletErrorText(err), true);
@@ -187,17 +230,28 @@ async function loadChainBoard() {
   const body = $('#lb-chain-body');
   if (!LEADERBOARD_ADDRESS) {
     $('#lb-meta').textContent = `Contract belum di-deploy di ${TARGET_CHAIN.name}.`;
-    messageRow(body, 4, 'Leaderboard on-chain belum tersedia.');
+    messageRow(body, 5, 'Leaderboard on-chain belum tersedia.');
     return;
   }
   $('#lb-refresh').disabled = true;
   try {
     chainBoard = await readLeaderboard();
     renderChainBoard();
+    // Other pilots' names live on the server; fill them in once they arrive.
+    const addresses = chainBoard.top.map((e) => e.player);
+    if (addresses.length) {
+      api
+        .profiles(addresses)
+        .then(({ names }) => {
+          rememberNames(names);
+          renderChainBoard();
+        })
+        .catch(() => {});
+    }
   } catch {
     chainBoard = null;
     $('#lb-meta').textContent = `Gagal membaca ${TARGET_CHAIN.name}.`;
-    messageRow(body, 4, 'Leaderboard on-chain tidak bisa dimuat. Coba muat ulang.');
+    messageRow(body, 5, 'Leaderboard on-chain tidak bisa dimuat. Coba muat ulang.');
   } finally {
     $('#lb-refresh').disabled = false;
   }
@@ -216,7 +270,7 @@ function renderChainBoard() {
     `Minggu #${chainBoard.week} · reset ${reset} · ${TARGET_CHAIN.name} · ${shortAddress(LEADERBOARD_ADDRESS)}`;
   const body = $('#lb-chain-body');
   if (!chainBoard.top.length) {
-    messageRow(body, 4, 'Belum ada skor minggu ini. Jadilah yang pertama!');
+    messageRow(body, 5, 'Belum ada skor minggu ini. Jadilah yang pertama!');
     return;
   }
   const me = currentPlayer()?.address?.toLowerCase();
@@ -230,7 +284,14 @@ function renderChainBoard() {
       score.textContent = fmt(e.score);
       const wave = document.createElement('td');
       wave.textContent = e.wave;
-      tr.append(rank, pilotCell(e.player), score, wave);
+      const watch = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-ghost btn-sm';
+      btn.textContent = 'TONTON';
+      btn.addEventListener('click', () => watchReplay({ week: chainBoard.week, player: e.player }));
+      watch.append(btn);
+      tr.append(rank, pilotCell(e.player), score, wave, watch);
       return tr;
     }),
   );
@@ -291,8 +352,8 @@ function renderLeaderboard() {
   });
 }
 
-document.querySelectorAll('[data-play]').forEach((b) => b.addEventListener('click', startGame));
-$('#retry-btn').addEventListener('click', startGame);
+document.querySelectorAll('[data-play]').forEach((b) => b.addEventListener('click', () => startGame()));
+$('#retry-btn').addEventListener('click', () => startGame(lastMode));
 $('#chain-submit-btn').addEventListener('click', submitLastRun);
 $('#lb-refresh').addEventListener('click', loadChainBoard);
 document.querySelectorAll('[data-tab]').forEach((tab) => tab.addEventListener('click', () => selectTab(tab.dataset.tab)));
@@ -383,7 +444,9 @@ initWalletUI({
     renderStats();
     renderLeaderboard();
     renderChainBoard();
+    renderDaily();
   },
 });
 loadChainBoard();
 initArsenalUI();
+initDailyUI({ onPlay: () => startGame({ daily: true }), onWatch: watchReplay });

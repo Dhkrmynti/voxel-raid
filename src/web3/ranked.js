@@ -79,12 +79,12 @@ wallet.subscribe((s) => {
  * Asks the server for a game ticket and the seed the run must use.
  * Resolves to null (an unranked run) when not signed in, offline, or too slow.
  */
-export async function startRankedRun(arena, timeoutMs = 4000) {
+export async function startRankedRun(arena, mode = 'ranked', timeoutMs = 4000) {
   if (!rankedState().active) return null;
   try {
-    const res = await Promise.race([api.startGame(arena), new Promise((_, reject) => setTimeout(reject, timeoutMs))]);
+    const res = await Promise.race([api.startGame(arena, mode), new Promise((_, reject) => setTimeout(reject, timeoutMs))]);
     if (res.simVersion !== SIM_VERSION) return null; // stale page: play unranked rather than fail later
-    return { ticket: res.ticket, seed: res.seed };
+    return { ticket: res.ticket, seed: res.seed, arena: res.arena, mode: res.mode };
   } catch {
     return null;
   }
@@ -105,7 +105,11 @@ async function gzipBase64(bytes) {
 export async function submitRun(ticket, run, replay, onStep) {
   if (!LEADERBOARD_ADDRESS) throw new Error(`Contract belum di-deploy di ${TARGET_CHAIN.name}.`);
   onStep('validating');
-  const { attestation: a, signature } = await api.finishGame(ticket, {
+  const {
+    attestation: a,
+    signature,
+    dailyRank,
+  } = await api.finishGame(ticket, {
     ...run,
     simVersion: SIM_VERSION,
     replay: await gzipBase64(replay),
@@ -130,7 +134,7 @@ export async function submitRun(ticket, run, replay, onStep) {
   onStep('pending', hash);
   const receipt = await waitForTransactionReceipt(config, { hash, chainId: TARGET_CHAIN.id });
   if (receipt.status !== 'success') throw new Error('Transaksi gagal di chain.');
-  return hash;
+  return { hash, dailyRank: dailyRank ?? null };
 }
 
 export function txUrl(hash) {

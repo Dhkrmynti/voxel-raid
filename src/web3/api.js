@@ -25,6 +25,11 @@ export const api = {
   verify: (message, signature) => call('/auth/verify', { method: 'POST', body: { message, signature } }),
   me: () => call('/auth/me'),
   logout: () => call('/auth/logout', { method: 'POST' }),
-  startGame: (arena) => call('/game/start', { method: 'POST', body: { arena } }),
+  startGame: (arena, mode) => call('/game/start', { method: 'POST', body: { arena, mode } }),
   finishGame: (ticket, run) => call('/game/finish', { method: 'POST', body: { ticket, ...run } }),
+  daily: () => call('/daily'),
+  replay: (sessionId) => call(`/replays/${encodeURIComponent(sessionId)}`),
+  bestReplay: (week, player) => call(`/replays/best?week=${week}&player=${player}`),
+  profiles: (addresses) => call(`/profiles?addresses=${addresses.join(',')}`),
+  saveName: (name) => call('/profile/name', { method: 'POST', body: { name } }),
 };

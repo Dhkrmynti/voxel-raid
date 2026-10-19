@@ -19,6 +19,7 @@
       <header class="nav">
         <a class="logo" href="#">VOXEL<span>//</span>RAID</a>
         <nav class="nav-links">
+          <a href="#daily">Daily</a>
           <a href="#features">Fitur</a>
           <a href="#how">Cara Main</a>
           <a href="#leaderboard">Leaderboard</a>
@@ -59,6 +60,35 @@
           <div class="stat"><b id="stat-played">0</b><span>Game dimainkan</span></div>
         </div>
         <p class="stats-owner">Statistik untuk <b id="stats-owner">GUEST</b></p>
+      </section>
+
+      <section class="section" id="daily">
+        <div class="wrap">
+          <h2>Daily Challenge</h2>
+          <p class="sub">
+            Satu dunia yang sama untuk semua pemain hari ini: seed dan arena identik. Siapa yang bertahan paling jauh?
+          </p>
+          <div class="daily-head">
+            <div class="daily-stat"><span>ARENA HARI INI</span><b id="daily-arena">—</b></div>
+            <div class="daily-stat"><span>RESET DALAM</span><b id="daily-reset">—</b></div>
+            <button class="btn btn-primary" type="button" id="daily-play">▶ MAIN DAILY</button>
+          </div>
+          <p class="hint" id="daily-note"></p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Pilot</th>
+                  <th>Skor</th>
+                  <th>Wave</th>
+                  <th><span class="sr-only">Replay</span></th>
+                </tr>
+              </thead>
+              <tbody id="daily-body"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section class="section" id="features">
@@ -203,6 +233,7 @@
                     <th>Pilot</th>
                     <th>Skor</th>
                     <th>Wave</th>
+                    <th><span class="sr-only">Replay</span></th>
                   </tr>
                 </thead>
                 <tbody id="lb-chain-body"></tbody>
@@ -325,6 +356,13 @@
       </div>
 
       <div id="callout" class="hud"></div>
+      <div id="replay-bar" hidden>
+        <span id="replay-label"></span>
+        <div class="replay-track"><div id="replay-progress"></div></div>
+        <button class="btn btn-sm btn-ghost" type="button" id="replay-pause">JEDA</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="replay-speed" title="Kecepatan (F)">1×</button>
+        <button class="btn btn-sm" type="button" id="replay-exit">KELUAR</button>
+      </div>
       <div id="dmg-layer" aria-hidden="true"></div>
 
       <div id="boss-bar" class="hud" hidden>
@@ -536,6 +574,8 @@
         </div>
       </div>
     </dialog>
+
+    <p id="replay-status" class="toast" role="status"></p>
 
     <script type="module" src="/src/main.js"></script>
   </body>

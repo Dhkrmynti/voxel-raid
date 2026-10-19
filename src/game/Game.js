@@ -21,6 +21,7 @@ const QUALITY = {
 };
 const SLOW_FRAME = 1 / 42; // auto quality drops when frames average slower than this
 const MAX_STEPS_PER_FRAME = 5;
+const REPLAY_SPEEDS = [1, 2, 4];
 const MAX_DMG_NUMBERS = 32;
 const BASE_FOV = 75;
 const DUST_COUNT = 260;
@@ -156,6 +157,11 @@ export class Game {
       bossFill: q('#boss-fill'),
       pause: q('#pause-overlay'),
       dmgLayer: q('#dmg-layer'),
+      replayBar: q('#replay-bar'),
+      replayLabel: q('#replay-label'),
+      replayProgress: q('#replay-progress'),
+      replayPause: q('#replay-pause'),
+      replaySpeed: q('#replay-speed'),
       flash: q('#screen-flash'),
     };
     this.hudCache = new Map();
@@ -176,6 +182,9 @@ export class Game {
     this.buildWorld();
     this.buildWeapons();
     this.bindInput();
+    this.hud.replayPause.addEventListener('click', () => this.toggleReplayPause());
+    this.hud.replaySpeed.addEventListener('click', () => this.cycleReplaySpeed());
+    q('#replay-exit').addEventListener('click', () => this.quit());
     this.resize();
     window.addEventListener('resize', () => this.resize());
     this.loop = this.loop.bind(this);
@@ -371,6 +380,15 @@ export class Game {
 
   bindInput() {
     window.addEventListener('keydown', (e) => {
+      if (this.state === 'replay' || this.state === 'replay-end') {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          this.toggleReplayPause();
+        }
+        if (e.code === 'KeyF') this.cycleReplaySpeed();
+        if (e.code === 'Escape') this.quit();
+        return;
+      }
       if (this.state !== 'playing') return;
       this.keys.add(e.code);
       if (!e.repeat) {
@@ -444,12 +462,63 @@ export class Game {
   // ---------- lifecycle ----------
 
   start({ seed, arena = DEFAULT_ARENA } = {}) {
+    this.prepare(seed ?? crypto.getRandomValues(new Uint32Array(1))[0], arena);
+    this.replay = new ReplayWriter(); // every input the sim consumes, for server-side verification
+    this.showBanner('BERSIAP!', 'Wave 1 segera dimulai');
+    this.state = 'playing';
+    this.hud.pause.hidden = true;
+    this.hud.replayBar.hidden = true;
+    this.lock();
+    this.run();
+  }
+
+  /**
+   * Plays back a recorded run: the same seed and inputs drive the same sim, so it's an exact replay.
+   * @param {{ seed: number, arena: string, inputs: object[], label: string }} replay
+   */
+  startReplay({ seed, arena, inputs, label }) {
+    this.prepare(seed, arena);
+    this.playback = { inputs, index: 0, speed: 1, paused: false };
+    this.replay = null;
+    this.hud.replayLabel.textContent = label;
+    this.hud.replayPause.textContent = 'JEDA';
+    this.hud.replaySpeed.textContent = '1×';
+    this.hud.replayBar.hidden = false;
+    this.hud.pause.hidden = true;
+    this.state = 'replay';
+    this.run();
+  }
+
+  toggleReplayPause() {
+    if (!this.playback || this.state !== 'replay') return;
+    this.playback.paused = !this.playback.paused;
+    this.hud.replayPause.textContent = this.playback.paused ? 'LANJUT' : 'JEDA';
+  }
+
+  cycleReplaySpeed() {
+    if (!this.playback) return;
+    const next = REPLAY_SPEEDS[(REPLAY_SPEEDS.indexOf(this.playback.speed) + 1) % REPLAY_SPEEDS.length];
+    this.playback.speed = next;
+    this.hud.replaySpeed.textContent = `${next}×`;
+  }
+
+  run() {
+    music.start();
+    music.setIntensity(0);
+    if (!this.running) {
+      this.running = true;
+      this.clock.getDelta();
+      requestAnimationFrame(this.loop);
+    }
+  }
+
+  /** Fresh sim and a clean view, shared by live games and replays. */
+  prepare(seed, arena) {
     sfx.unlock();
     this.resize();
     this.clearViews();
     this.buildArena(arena);
-    this.sim = new Sim(seed ?? crypto.getRandomValues(new Uint32Array(1))[0], { arena });
-    this.replay = new ReplayWriter(); // every input the sim consumes, for server-side verification
+    this.sim = new Sim(seed, { arena });
     this.aim = { yaw: 0, pitch: 0 };
     this.pending = { dash: false, reload: false, weapon: -1 };
     this.touchControls?.reset();
@@ -472,18 +541,6 @@ export class Game {
     this.hud.callout.classList.remove('show');
     this.hudCache.clear();
     this.clearBanners();
-    this.showBanner('BERSIAP!', 'Wave 1 segera dimulai');
-
-    this.state = 'playing';
-    this.hud.pause.hidden = true;
-    music.start();
-    music.setIntensity(0);
-    this.lock();
-    if (!this.running) {
-      this.running = true;
-      this.clock.getDelta();
-      requestAnimationFrame(this.loop);
-    }
   }
 
   resume() {
@@ -495,7 +552,9 @@ export class Game {
   quit() {
     this.state = 'idle';
     this.running = false;
+    this.playback = null;
     this.hud.pause.hidden = true;
+    this.hud.replayBar.hidden = true;
     if (document.pointerLockElement) document.exitPointerLock();
     this.clearBanners();
     clearTimeout(this.calloutTimer);
@@ -576,11 +635,36 @@ export class Game {
       if (steps === MAX_STEPS_PER_FRAME) this.acc = 0; // too slow to catch up: drop time instead of spiralling
       this.handleEvents();
       if (this.sim.over) this.gameOver();
+    } else if (this.state === 'replay') {
+      this.stepReplay(dt);
     }
     if (this.sim) this.updateView(dt);
     if (this.state === 'playing') this.watchFrameRate(dt);
     if (this.quality.glow) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  stepReplay(dt) {
+    const pb = this.playback;
+    if (!pb.paused) {
+      this.acc += dt * pb.speed;
+      let steps = 0;
+      while (this.acc >= TICK && steps < MAX_STEPS_PER_FRAME * pb.speed && pb.index < pb.inputs.length && !this.sim.over) {
+        const input = pb.inputs[pb.index++];
+        this.aim.yaw = input.yaw;
+        this.aim.pitch = input.pitch;
+        this.sim.step(input);
+        this.acc -= TICK;
+        steps++;
+      }
+    }
+    this.handleEvents();
+    this.hud.replayProgress.style.width = `${(pb.index / pb.inputs.length) * 100}%`;
+    if (this.sim.over || pb.index >= pb.inputs.length) {
+      this.state = 'replay-end';
+      this.showBanner('REPLAY SELESAI', 'Tekan KELUAR untuk kembali');
+      music.stop(1.5);
+    }
   }
 
   sampleInput() {
@@ -951,12 +1035,12 @@ export class Game {
   // ---------- per-frame view ----------
 
   updateView(dt) {
-    if (this.state === 'over') {
+    if (this.state === 'over' || (this.state === 'replay-end' && this.sim.over)) {
       this.deathT += dt;
       this.guns.forEach((g) => (g.group.visible = false));
       this.camera.position.y = Math.max(0.35, this.camera.position.y - dt * 2.5);
       this.camera.rotation.z = Math.min(0.45, this.deathT * 0.8);
-    } else if (this.state === 'playing' || this.state === 'paused') {
+    } else if (this.state === 'playing' || this.state === 'paused' || this.state.startsWith('replay')) {
       this.updateCamera(dt);
       this.syncEntities(dt);
       this.updateHud(dt);
@@ -970,7 +1054,7 @@ export class Game {
 
   updateAmbience(dt) {
     const sim = this.sim;
-    if (this.state === 'playing') music.setIntensity(sim.boss ? 2 : sim.intermission > 0 ? 0 : 1);
+    if (this.state === 'playing' || this.state === 'replay') music.setIntensity(sim.boss ? 2 : sim.intermission > 0 ? 0 : 1);
 
     const beat = music.pulse();
     this.trim.mat.color.copy(this.trim.base).multiplyScalar(1 + beat * 0.7);
